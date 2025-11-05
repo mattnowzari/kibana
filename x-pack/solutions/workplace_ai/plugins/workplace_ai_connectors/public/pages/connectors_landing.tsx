@@ -41,7 +41,7 @@ export const ConnectorsLandingPage = () => {
   const [selectedConnectorType, setSelectedConnectorType] = useState<string | null>(null);
 
   const { euiTheme } = useEuiTheme();
-  const { isLoading, createConnector, deleteConnector, isConnected, connectors } =
+  const { isLoading, createConnector, deleteConnector, isConnected, connectors, refreshConnectors } =
     useConnectors(httpClient);
   const brave = useMemo(
     () => connectors.find((c) => c.type === WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH),
@@ -325,6 +325,7 @@ export const ConnectorsLandingPage = () => {
           <GoogleDriveConnectorFlyout
             onClose={handleCloseFlyout}
             isEditing={Boolean(googleDriveConnected)}
+            onConnectionSuccess={refreshConnectors}
           />
         )}
 
