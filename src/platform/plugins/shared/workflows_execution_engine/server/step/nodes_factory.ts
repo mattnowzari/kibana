@@ -22,6 +22,7 @@ import type {
   ExitRetryNode,
   GraphNodeUnion,
   HttpGraphNode,
+  SlackSearchNode,
   WorkflowGraph,
 } from '@kbn/workflows/graph';
 import {
@@ -34,6 +35,7 @@ import { AtomicStepImpl } from './atomic_step/atomic_step_impl';
 import { ElasticsearchActionStepImpl } from './elasticsearch_action_step';
 import { EnterForeachNodeImpl, ExitForeachNodeImpl } from './foreach_step';
 import { HttpStepImpl } from './http_step';
+
 import {
   EnterConditionBranchNodeImpl,
   EnterIfNodeImpl,
@@ -53,6 +55,7 @@ import {
   ExitTryBlockNodeImpl,
 } from './on_failure/fallback-step';
 import { EnterRetryNodeImpl, ExitRetryNodeImpl } from './on_failure/retry_step';
+import { SlackSearchStepImpl } from './slack';
 import {
   EnterStepTimeoutZoneNodeImpl,
   EnterWorkflowTimeoutZoneNodeImpl,
@@ -220,6 +223,14 @@ export class NodesFactory {
           this.workflowTaskManager
         );
       case 'atomic':
+        if (node.configuration.type == 'slack-search') {
+          return new SlackSearchStepImpl(
+            node as SlackSearchNode,
+            stepExecutionRuntime,
+            stepLogger,
+            this.workflowRuntime
+          );
+        }
         // Default atomic step (connector-based)
         return new AtomicStepImpl(
           node as AtomicGraphNode,
