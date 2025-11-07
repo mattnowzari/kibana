@@ -10,6 +10,7 @@
 import { z } from '@kbn/zod';
 import {
   ElasticsearchStepSchema,
+  GDriveStepSchema,
   HttpStepSchema,
   KibanaStepSchema,
   SlackSearchStepSchema,
@@ -44,6 +45,12 @@ export const HttpGraphNodeSchema = GraphNodeSchema.extend({
 });
 export type HttpGraphNode = z.infer<typeof HttpGraphNodeSchema>;
 
+export const GDriveGraphNodeSchema = GraphNodeSchema.extend({
+  id: z.string(),
+  type: z.literal('gdrive'),
+  configuration: GDriveStepSchema,
+});
+export type GDriveGraphNode = z.infer<typeof GDriveGraphNodeSchema>;
 export const SlackSearchNodeSchema = GraphNodeSchema.extend({
   id: z.string(),
   type: z.literal('slack-search'),
