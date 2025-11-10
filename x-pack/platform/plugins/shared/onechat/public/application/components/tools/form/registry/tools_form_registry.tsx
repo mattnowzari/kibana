@@ -14,11 +14,13 @@ import { esqlToolFormRegistryEntry } from './tool_types/esql';
 import { indexSearchToolRegistryEntry } from './tool_types/index_search';
 import { builtinToolRegistryEntry } from './tool_types/builtin';
 import { workflowToolRegistryEntry } from './tool_types/workflow';
+import { mcpToolRegistryEntry } from './tool_types/mcp';
 
 export const TOOLS_FORM_REGISTRY = {
   [ToolType.esql]: esqlToolFormRegistryEntry,
   [ToolType.index_search]: indexSearchToolRegistryEntry,
   [ToolType.workflow]: workflowToolRegistryEntry,
+  [ToolType.mcp]: mcpToolRegistryEntry,
   [ToolType.builtin]: builtinToolRegistryEntry,
 };
 

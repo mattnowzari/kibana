@@ -30,6 +30,7 @@ export interface OnechatStartDependencies {
   licensing: LicensingPluginStart;
   cloud?: CloudStart;
   spaces?: SpacesPluginStart;
+  actions: import('@kbn/actions-plugin/server').PluginStartContract;
 }
 
 export interface AttachmentsSetup {

@@ -39,6 +39,7 @@ export const ResilientLogoLazy = lazy(() => import('../../connector_types/resili
 export const MicrosoftDefenderEndpointLogoLazy = lazy(
   () => import('../../connector_types/microsoft_defender_endpoint/logo')
 );
+export const McpLogoLazy = lazy(() => import('../../connector_types/mcp/logo'));
 
 export function getStackConnectorLogoLazy(dottedType: string) {
   switch (dottedType) {
@@ -86,6 +87,8 @@ export function getStackConnectorLogoLazy(dottedType: string) {
       return OpsGenieLogoLazy;
     case '.resilient':
       return ResilientLogoLazy;
+    case '.mcp':
+      return McpLogoLazy;
     default:
       return null;
   }
@@ -153,6 +156,8 @@ export async function getStackConnectorLogo(
       return await import('../../connector_types/opsgenie/logo').then((module) => module.default);
     case '.resilient':
       return await import('../../connector_types/resilient/logo').then((module) => module.default);
+    case '.mcp':
+      return await import('../../connector_types/mcp/logo').then((module) => module.default);
     default:
       return null;
   }

@@ -13,6 +13,7 @@ import type {
 } from '@kbn/core/server';
 import type { Runner } from '@kbn/onechat-server';
 import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugin/server';
+import type { PluginStartContract as ActionsPluginStart } from '@kbn/actions-plugin/server';
 import { isAllowedBuiltinTool } from '@kbn/onechat-server/allow_lists';
 import type { SpacesPluginStart } from '@kbn/spaces-plugin/server';
 import { getCurrentSpaceId } from '../../utils/spaces';
@@ -39,6 +40,7 @@ export interface ToolsServiceStartDeps {
   spaces?: SpacesPluginStart;
   uiSettings: UiSettingsServiceStart;
   savedObjects: SavedObjectsServiceStart;
+  actions?: ActionsPluginStart;
 }
 
 export class ToolsService {
@@ -72,10 +74,14 @@ export class ToolsService {
     spaces,
     uiSettings,
     savedObjects,
+    actions,
   }: ToolsServiceStartDeps): ToolsServiceStart {
     const { logger, workflowsManagement } = this.setupDeps!;
 
-    const toolTypes = getToolTypeDefinitions({ workflowsManagement });
+    const toolTypes = getToolTypeDefinitions({
+      workflowsManagement,
+      getActions: () => actions,
+    });
 
     const builtinProviderFn = createBuiltinProviderFn({
       registry: this.builtinRegistry,
@@ -87,6 +93,7 @@ export class ToolsService {
       logger,
       esClient: elasticsearch.client.asInternalUser,
       toolTypes,
+      getActions: () => actions,
     });
 
     const getRegistry: ToolsServiceStart['getRegistry'] = async ({ request }) => {

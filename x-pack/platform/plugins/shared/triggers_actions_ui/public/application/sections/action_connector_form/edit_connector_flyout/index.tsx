@@ -231,6 +231,17 @@ const EditConnectorFlyoutComponent: React.FC<EditConnectorFlyoutProps> = ({
     };
   }, []);
 
+  // Initialize test params from defaultActionParams when test tab is opened
+  useEffect(() => {
+    if (selectedTab === EditConnectorTabs.Test && actionTypeModel?.defaultActionParams) {
+      const defaultParams = actionTypeModel.defaultActionParams;
+      // Only initialize if test params are empty
+      if (!testExecutionActionParams || Object.keys(testExecutionActionParams).length === 0) {
+        setTestExecutionActionParams(defaultParams);
+      }
+    }
+  }, [selectedTab, actionTypeModel, testExecutionActionParams]);
+
   const renderConfigurationTab = useCallback(() => {
     if (!connector.isPreconfigured && !connector.isSystemAction) {
       return (

@@ -183,6 +183,12 @@ export const i18nMessages = {
             defaultMessage: 'Workflow',
           }
         ),
+        mcpOption: i18n.translate(
+          'xpack.onechat.tools.newTool.configuration.form.type.mcpOption',
+          {
+            defaultMessage: 'MCP',
+          }
+        ),
       },
       indexSearch: {
         patternLabel: i18n.translate(
@@ -211,6 +217,26 @@ export const i18nMessages = {
           'xpack.onechat.tools.newTool.configuration.form.workflow.workflowLabel',
           {
             defaultMessage: 'Workflow',
+          }
+        ),
+      },
+      mcp: {
+        connectorLabel: i18n.translate(
+          'xpack.onechat.tools.newTool.configuration.form.mcp.connectorLabel',
+          {
+            defaultMessage: 'MCP Connector',
+          }
+        ),
+        capabilitiesLabel: i18n.translate(
+          'xpack.onechat.tools.newTool.configuration.form.mcp.capabilitiesLabel',
+          {
+            defaultMessage: 'Capabilities',
+          }
+        ),
+        capabilitiesHelpText: i18n.translate(
+          'xpack.onechat.tools.newTool.configuration.form.mcp.capabilitiesHelpText',
+          {
+            defaultMessage: 'Select which MCP server capabilities to import as tools',
           }
         ),
       },
