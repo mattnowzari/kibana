@@ -2398,6 +2398,8 @@
       "@kbn/workflows-ui/*": ["src/platform/packages/shared/kbn-workflows-ui/*"],
       "@kbn/workplace-ai-app": ["x-pack/solutions/workplaceai/plugins/workplace_ai_app"],
       "@kbn/workplace-ai-app/*": ["x-pack/solutions/workplaceai/plugins/workplace_ai_app/*"],
+      "@kbn/workplace-ai-connectors-plugin": ["x-pack/solutions/workplace_ai/plugins/workplace_ai_connectors"],
+      "@kbn/workplace-ai-connectors-plugin/*": ["x-pack/solutions/workplace_ai/plugins/workplace_ai_connectors/*"],
       "@kbn/workspaces": ["src/platform/packages/shared/kbn-workspaces"],
       "@kbn/workspaces/*": ["src/platform/packages/shared/kbn-workspaces/*"],
       "@kbn/xstate-utils": ["src/platform/packages/shared/kbn-xstate-utils"],

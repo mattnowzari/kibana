@@ -85,7 +85,7 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
       return this.handleFailure(input, error);
     }
   }
-
+// -------------------------------------------------------------
   private async executeHttpRequest(input?: any): Promise<RunStepResult> {
     const { url, method, headers, body, fetcher: fetcherOptions } = input;
 
@@ -96,6 +96,7 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
 
     let finalUrl: string = url;
     let finalHeaders: HttpHeaders | undefined = headers;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let finalBody: any = body;
 
     if (dependencies?.secretResolver && coreStart && fakeRequest) {
@@ -228,6 +229,8 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
       error: undefined,
     };
   }
+
+  // -------------------------------------------------------------
 
   protected async handleFailure(input: any, error: any): Promise<RunStepResult> {
     let errorMessage: string;
