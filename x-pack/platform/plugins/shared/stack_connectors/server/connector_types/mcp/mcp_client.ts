@@ -19,14 +19,14 @@ export interface McpToolDefinition {
   description?: string;
   inputSchema: {
     type: string;
-    properties?: Record<string, any>;
+    properties?: Record<string, unknown>;
     required?: string[];
   };
 }
 
 export interface McpInitializeParams {
   protocolVersion?: string;
-  capabilities?: Record<string, any>;
+  capabilities?: Record<string, unknown>;
   clientInfo?: {
     name: string;
     version: string;
@@ -35,7 +35,7 @@ export interface McpInitializeParams {
 
 export interface McpCallToolParams {
   name: string;
-  arguments?: Record<string, any>;
+  arguments?: Record<string, unknown>;
 }
 
 export class McpClient {
@@ -43,6 +43,7 @@ export class McpClient {
   private protocolVersion: string = DEFAULT_NEGOTIATED_PROTOCOL_VERSION;
   private initialized: boolean = false;
   private logger: Logger;
+  private sessionId?: string;
 
   constructor(
     url: string,
@@ -60,7 +61,7 @@ export class McpClient {
       headers.Authorization = `Bearer ${apiKey}`;
     }
 
-    const axiosConfig: any = {
+    const axiosConfig: AxiosRequestConfig = {
       baseURL: url,
       headers,
       timeout: 30000,
@@ -69,8 +70,10 @@ export class McpClient {
     // Use custom agents for proper SSL/TLS handling if configurationUtilities is provided
     if (configurationUtilities) {
       const customAgents = getCustomAgents(configurationUtilities, logger, url);
-      axiosConfig.httpAgent = customAgents.httpAgent;
-      axiosConfig.httpsAgent = customAgents.httpsAgent;
+      type NodeAxiosConfig = AxiosRequestConfig & { httpAgent?: unknown; httpsAgent?: unknown };
+      const nodeAxiosConfig = axiosConfig as NodeAxiosConfig;
+      nodeAxiosConfig.httpAgent = customAgents.httpAgent;
+      nodeAxiosConfig.httpsAgent = customAgents.httpsAgent;
     }
 
     this.axiosInstance = axios.create(axiosConfig);
@@ -120,11 +123,19 @@ export class McpClient {
         }
       }
 
+      // Persist session ID from response headers (stateful servers include this)
+      const sessionHeader = response.headers?.['mcp-session-id'] as string | string[] | undefined;
+      if (sessionHeader) {
+        this.sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader;
+        this.logger.debug(`MCP session established: ${this.sessionId}`);
+      }
+
       this.initialized = true;
       this.logger.debug('MCP client initialized successfully');
-    } catch (error: any) {
-      this.logger.error(`MCP initialization error: ${error.message}`);
-      throw new Error(`Failed to initialize MCP connection: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`MCP initialization error: ${message}`);
+      throw new Error(`Failed to initialize MCP connection: ${message}`);
     }
   }
 
@@ -141,11 +152,13 @@ export class McpClient {
     };
 
     try {
-      const config: AxiosRequestConfig = {
-        headers: {
-          'mcp-protocol-version': this.protocolVersion,
-        },
+      const headers: Record<string, string> = {
+        'mcp-protocol-version': this.protocolVersion,
       };
+      if (this.sessionId) {
+        headers['mcp-session-id'] = this.sessionId;
+      }
+      const config: AxiosRequestConfig = { headers };
 
       const response = await this.axiosInstance.post('', request, config);
       let result = response.data;
@@ -160,13 +173,14 @@ export class McpClient {
       }
 
       return result.result?.tools || [];
-    } catch (error: any) {
-      this.logger.error(`MCP tools/list error: ${error.message}`);
-      throw new Error(`Failed to list MCP tools: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`MCP tools/list error: ${message}`);
+      throw new Error(`Failed to list MCP tools: ${message}`);
     }
   }
 
-  async callTool(params: McpCallToolParams): Promise<any> {
+  async callTool(params: McpCallToolParams): Promise<unknown> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -183,11 +197,13 @@ export class McpClient {
     };
 
     try {
-      const config: AxiosRequestConfig = {
-        headers: {
-          'mcp-protocol-version': this.protocolVersion,
-        },
+      const headers: Record<string, string> = {
+        'mcp-protocol-version': this.protocolVersion,
       };
+      if (this.sessionId) {
+        headers['mcp-session-id'] = this.sessionId;
+      }
+      const config: AxiosRequestConfig = { headers };
 
       const response = await this.axiosInstance.post('', request, config);
       let result = response.data;
@@ -202,9 +218,10 @@ export class McpClient {
       }
 
       return result.result;
-    } catch (error: any) {
-      this.logger.error(`MCP tools/call error: ${error.message}`);
-      throw new Error(`Failed to call MCP tool: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`MCP tools/call error: ${message}`);
+      throw new Error(`Failed to call MCP tool: ${message}`);
     }
   }
 
@@ -212,4 +229,3 @@ export class McpClient {
     return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }
-

@@ -5,17 +5,13 @@
  * 2.0.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { i18n } from '@kbn/i18n';
 import type { ActionParamsProps } from '@kbn/triggers-actions-ui-plugin/public';
-import { SelectField } from '@kbn/es-ui-shared-plugin/static/forms/components';
-import { UseField } from '@kbn/es-ui-shared-plugin/static/forms/hook_form_lib';
-import { fieldValidators } from '@kbn/es-ui-shared-plugin/static/forms/helpers';
+import { EuiFormRow, EuiSelect } from '@elastic/eui';
 import { JsonEditorWithMessageVariables } from '@kbn/triggers-actions-ui-plugin/public';
 import type { ActionParamsType } from '@kbn/connector-schemas/mcp';
 import * as i18nTranslations from './translations';
-
-const { emptyField } = fieldValidators;
 
 const MCP_METHODS = [
   { value: 'initialize', text: 'Initialize' },
@@ -32,40 +28,44 @@ const McpParamsFields: React.FunctionComponent<ActionParamsProps<ActionParamsTyp
 }) => {
   const { method, params } = actionParams;
 
+  // Ensure a default method is selected if none provided
+  useEffect(() => {
+    if (!method) {
+      editAction('method', 'tools/list', index);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [method]);
+
   return (
     <>
-      <UseField
-        path={`params.${index}.method`}
-        component={SelectField}
-        config={{
-          label: i18nTranslations.METHOD_LABEL,
-          defaultValue: 'tools/list',
-          validations: [
-            {
-              validator: emptyField(i18nTranslations.METHOD_REQUIRED),
-            },
-          ],
-        }}
-        componentProps={{
-          euiFieldProps: {
-            'data-test-subj': 'mcpMethodSelect',
-            options: MCP_METHODS,
-            fullWidth: true,
-            value: method || 'tools/list',
-            onChange: (e: React.ChangeEvent<HTMLSelectElement>) => {
-              editAction('method', e.target.value, index);
-            },
-          },
-        }}
-      />
+      <EuiFormRow
+        fullWidth
+        label={i18nTranslations.METHOD_LABEL}
+        isInvalid={Boolean(errors.method && errors.method.length)}
+        error={errors.method as string[]}
+      >
+        <EuiSelect
+          fullWidth
+          data-test-subj="mcpMethodSelect"
+          options={MCP_METHODS}
+          isInvalid={Boolean(errors.method && errors.method.length)}
+          value={method ?? 'tools/list'}
+          onChange={(e) => {
+            editAction('method', e.target.value, index);
+          }}
+        />
+      </EuiFormRow>
       <JsonEditorWithMessageVariables
         messageVariables={messageVariables}
         paramsProperty={'params'}
         inputTargetValue={params ? JSON.stringify(params, null, 2) : ''}
         label={i18nTranslations.PARAMS_LABEL}
-        ariaLabel={i18n.translate('xpack.stackConnectors.components.mcp.paramsCodeEditorAriaLabel', {
-          defaultMessage: 'Parameters code editor',
-        })}
+        ariaLabel={i18n.translate(
+          'xpack.stackConnectors.components.mcp.paramsCodeEditorAriaLabel',
+          {
+            defaultMessage: 'Parameters code editor',
+          }
+        )}
         errors={errors.params as string[]}
         onDocumentsChange={(json: string) => {
           try {
@@ -89,4 +89,3 @@ const McpParamsFields: React.FunctionComponent<ActionParamsProps<ActionParamsTyp
 
 // eslint-disable-next-line import/no-default-export
 export { McpParamsFields as default };
-
