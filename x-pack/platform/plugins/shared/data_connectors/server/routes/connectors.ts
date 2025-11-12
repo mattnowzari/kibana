@@ -28,20 +28,24 @@ import type { WorkflowCreatorService } from '../services/workflow_creator';
 
 // Connector configuration - eventually this will come from an API
 interface ConnectorConfig {
+  name: string;
   defaultFeatures: string[];
   oauthConfig?: {
     provider: string;
     scopes: string[];
     initiatePath: string;
     fetchSecretsPath: string;
+    oauthBaseUrl?: string; // OAuth service base URL
   };
 }
 
 const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
   brave_search: {
+    name: 'Brave Search',
     defaultFeatures: ['search_web'],
   },
   google_drive: {
+    name: 'Google Drive',
     defaultFeatures: ['search_files'],
     oauthConfig: {
       provider: 'google',
@@ -53,6 +57,7 @@ const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
       ],
       initiatePath: '/oauth/start/google',
       fetchSecretsPath: '/oauth/fetch_request_secrets',
+      oauthBaseUrl: 'https://localhost:8052',
     },
   },
 };
@@ -128,16 +133,100 @@ function getDefaultFeatures(connectorType: string): string[] {
   return CONNECTOR_CONFIG[connectorType]?.defaultFeatures || [];
 }
 
+// Helper function to create initial connector for OAuth flow
+async function createOAuthConnector(
+  connectorType: string,
+  savedObjectsClient: SavedObjectsClientContract
+): Promise<{ id: string }> {
+  const connectorConfig = CONNECTOR_CONFIG[connectorType];
+  if (!connectorConfig) {
+    throw new Error(`Connector config not found for type: ${connectorType}`);
+  }
+
+  const now = new Date().toISOString();
+
+  const savedObject = await savedObjectsClient.create(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, {
+    name: connectorConfig.name,
+    type: connectorType,
+    config: { status: 'pending_oauth' },
+    secrets: {},
+    features: connectorConfig.defaultFeatures,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return savedObject;
+}
+
+// Helper function to fetch OAuth secrets with retry logic
+interface OAuthSecretsResponse {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: string;
+}
+
+async function fetchOAuthSecrets(
+  secretsUrl: string,
+  maxRetries: number,
+  retryDelay: number,
+  logger: Logger
+): Promise<OAuthSecretsResponse> {
+  let secretsresponse: axios.AxiosResponse<OAuthSecretsResponse> | undefined;
+  let accessToken: string | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      secretsresponse = await axios.get<OAuthSecretsResponse>(secretsUrl, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false,
+        }),
+      });
+
+      accessToken = secretsresponse.data.access_token;
+
+      if (accessToken) {
+        logger.info(`Access token found on attempt ${attempt}`);
+        break;
+      }
+
+      if (attempt < maxRetries) {
+        logger.info(`No access token found on attempt ${attempt}, retrying...`);
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      }
+    } catch (err) {
+      if (attempt < maxRetries) {
+        logger.warn(`Error fetching secrets on attempt ${attempt}, retrying...`, err);
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  if (!accessToken || !secretsresponse) {
+    throw new Error('Access token not found after 5 attempts');
+  }
+
+  return secretsresponse.data;
+}
+
 export function registerConnectorRoutes(
   router: IRouter,
   workflowCreator: WorkflowCreatorService,
   logger: Logger
 ) {
-  // Initiate Google Drive OAuth
+  // Initiate OAuth for connectors - dynamic route based on provider
   router.post(
     {
-      path: '/api/workplace_connectors/google/initiate',
-      validate: {},
+      path: '/api/workplace_connectors/{provider}/initiate',
+      validate: {
+        params: schema.object({
+          provider: schema.string(),
+        }),
+      },
       security: {
         authz: {
           enabled: false,
@@ -147,7 +236,22 @@ export function registerConnectorRoutes(
     },
     async (context, request, response) => {
       const coreContext = await context.core;
-      const connectorType = WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE;
+      const { provider } = request.params;
+
+      // Find connector type by OAuth provider
+      const connectorType = Object.keys(CONNECTOR_CONFIG).find(
+        (type) => CONNECTOR_CONFIG[type].oauthConfig?.provider === provider
+      );
+
+      if (!connectorType) {
+        return response.customError({
+          statusCode: 400,
+          body: {
+            message: `No connector found for OAuth provider: ${provider}`,
+          },
+        });
+      }
+
       const connectorConfig = CONNECTOR_CONFIG[connectorType];
 
       if (!connectorConfig?.oauthConfig) {
@@ -161,19 +265,12 @@ export function registerConnectorRoutes(
 
       try {
         const savedObjectsClient = coreContext.savedObjects.client;
-        const now = new Date().toISOString();
 
-        const savedObject = await savedObjectsClient.create(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, {
-          name: 'Google Drive',
-          type: connectorType,
-          config: { status: 'pending_oauth' },
-          secrets: {},
-          features: connectorConfig.defaultFeatures,
-          createdAt: now,
-          updatedAt: now,
-        });
+        // Create connector using data-driven helper
+        const savedObject = await createOAuthConnector(connectorType, savedObjectsClient);
 
-        const oauthUrl = `https://localhost:8052${connectorConfig.oauthConfig.initiatePath}`;
+        const oauthBaseUrl = connectorConfig.oauthConfig.oauthBaseUrl || 'https://localhost:8052';
+        const oauthUrl = `${oauthBaseUrl}${connectorConfig.oauthConfig.initiatePath}`;
         const authresponse = await axios.post<{ auth_url: string; request_id: string }>(
           oauthUrl,
           {
@@ -186,16 +283,16 @@ export function registerConnectorRoutes(
           }
         );
 
-        const googleUrl = authresponse.data.auth_url;
+        const authUrl = authresponse.data.auth_url;
         const requestId = authresponse.data.request_id;
 
-        logger.info(`Google URL: ${googleUrl}`);
+        logger.info(`OAuth URL for ${provider}: ${authUrl}`);
 
         return response.ok({
           body: {
             connectorId: savedObject.id,
             requestId,
-            googleUrl,
+            authUrl,
           },
         });
       } catch (error) {
@@ -217,7 +314,7 @@ export function registerConnectorRoutes(
       validate: {
         query: schema.object({
           requestId: schema.string(),
-          connector_id: schema.string(),
+          connectorId: schema.string(),
         }),
       },
       security: {
@@ -251,65 +348,22 @@ export function registerConnectorRoutes(
           });
         }
 
-        // Fetch secrets from OAuth service
-        const secretsUrl = `https://localhost:8052${connectorConfig.oauthConfig.fetchSecretsPath}?request_id=${requestId}`;
+        // Fetch secrets from OAuth service using data-driven helper
+        const oauthBaseUrl = connectorConfig.oauthConfig.oauthBaseUrl || 'https://localhost:8052';
+        const secretsUrl = `${oauthBaseUrl}${connectorConfig.oauthConfig.fetchSecretsPath}?request_id=${requestId}`;
         const maxRetries = 5;
         const retryDelay = 2000;
-        interface OAuthSecretsResponse {
-          access_token?: string;
-          refresh_token?: string;
-          expires_in?: string;
-        }
-        let secretsresponse: axios.AxiosResponse<OAuthSecretsResponse> | undefined;
-        let accessToken: string | undefined;
 
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          try {
-            secretsresponse = await axios.get<OAuthSecretsResponse>(secretsUrl, {
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              httpsAgent: new https.Agent({
-                rejectUnauthorized: false,
-              }),
-            });
-
-            access_token = secretsresponse.data.access_token;
-
-            if (access_token) {
-              logger.info(`Access token found on attempt ${attempt}`);
-              break;
-            }
-
-            if (attempt < maxRetries) {
-              logger.info(`No access token found on attempt ${attempt}, retrying...`);
-              await new Promise((resolve) => setTimeout(resolve, retryDelay));
-            }
-          } catch (err) {
-            if (attempt < maxRetries) {
-              logger.warn(`Error fetching secrets on attempt ${attempt}, retrying...`, err);
-              await new Promise((resolve) => setTimeout(resolve, retryDelay));
-            } else {
-              throw err;
-            }
-          }
-        }
-
-        if (!access_token || !secretsresponse) {
-          throw new Error('Access token not found after 5 attempts');
-        }
-
-        const refresh_token = secretsresponse.data.refresh_token;
-        const expires_in = secretsresponse.data.expires_in;
+        const oauthSecrets = await fetchOAuthSecrets(secretsUrl, maxRetries, retryDelay, logger);
 
         logger.info(`Secrets fetched for connector ${connectorId}`);
 
         // Update connector with OAuth tokens
         await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connectorId, {
           secrets: {
-            access_token,
-            refresh_token: refresh_token || '',
-            expires_in: expires_in || '3600',
+            access_token: oauthSecrets.access_token || '',
+            refresh_token: oauthSecrets.refresh_token || '',
+            expires_in: oauthSecrets.expires_in || '3600',
           },
           config: { status: 'connected' },
           updatedAt: new Date().toISOString(),

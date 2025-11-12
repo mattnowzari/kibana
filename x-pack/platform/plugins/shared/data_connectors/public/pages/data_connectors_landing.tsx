@@ -45,31 +45,25 @@ interface ConnectorTileData {
 }
 
 // Component registry - maps component IDs to actual React components
-type StandardFlyoutProps = {
+interface StandardFlyoutProps {
   connectorType: string;
   connectorName: string;
   onClose: () => void;
   onSave: (data: any) => Promise<void>;
   isEditing: boolean;
-};
+}
 
-type CustomFlyoutProps = {
+interface CustomFlyoutProps {
   onClose: () => void;
   isEditing: boolean;
   onConnectionSuccess: () => void;
-};
+}
 
-const FLYOUT_COMPONENT_REGISTRY: Record<
-  string,
-  React.ComponentType<StandardFlyoutProps>
-> = {
+const FLYOUT_COMPONENT_REGISTRY: Record<string, React.ComponentType<StandardFlyoutProps>> = {
   connector_flyout: ConnectorFlyout,
 };
 
-const CUSTOM_FLYOUT_COMPONENT_REGISTRY: Record<
-  string,
-  React.ComponentType<CustomFlyoutProps>
-> = {
+const CUSTOM_FLYOUT_COMPONENT_REGISTRY: Record<string, React.ComponentType<CustomFlyoutProps>> = {
   google_drive_connector_flyout: GoogleDriveConnectorFlyout,
 };
 
@@ -124,12 +118,18 @@ export const DataConnectorsLandingPage = () => {
   const [selectedConnectorType, setSelectedConnectorType] = useState<string | null>(null);
 
   const { euiTheme } = useEuiTheme();
-  const { isLoading, createConnector, deleteConnector, isConnected, connectors, refreshConnectors } =
-    useConnectors(httpClient);
+  const {
+    isLoading,
+    createConnector,
+    deleteConnector,
+    isConnected,
+    connectors,
+    refreshConnectors,
+  } = useConnectors(httpClient);
 
   // Create a map of connector types to their connector instances
   const connectorsByType = useMemo(() => {
-    const map = new Map<string, typeof connectors[0]>();
+    const map = new Map<string, (typeof connectors)[0]>();
     connectors.forEach((connector) => {
       map.set(connector.type, connector);
     });
