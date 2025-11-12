@@ -15,13 +15,118 @@ import type {
   CreateWorkplaceConnectorRequest,
   UpdateWorkplaceConnectorRequest,
   WorkplaceConnectorResponse,
+  WorkplaceConnectorAttributes,
 } from '../../common';
+import { WORKPLACE_CONNECTOR_TYPES } from '../../common';
 import {
   createConnectorRequestSchema,
   updateConnectorRequestSchema,
   connectorIdSchema,
 } from './schemas';
 import type { WorkflowCreatorService } from '../services/workflow_creator';
+
+// Connector configuration - eventually this will come from an API
+interface ConnectorConfig {
+  defaultFeatures: string[];
+  oauthConfig?: {
+    provider: string;
+    scopes: string[];
+    initiatePath: string;
+    fetchSecretsPath: string;
+  };
+}
+
+const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
+  brave_search: {
+    defaultFeatures: ['search_web'],
+  },
+  google_drive: {
+    defaultFeatures: ['search_files'],
+    oauthConfig: {
+      provider: 'google',
+      scopes: [
+        'email',
+        'profile',
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive.metadata.readonly',
+      ],
+      initiatePath: '/oauth/start/google',
+      fetchSecretsPath: '/oauth/fetch_request_secrets',
+    },
+  },
+};
+
+// Helper function to build response from saved object
+function buildConnectorResponse(
+  savedObject: { id: string; attributes: WorkplaceConnectorAttributes }
+): WorkplaceConnectorResponse {
+  const attrs = savedObject.attributes;
+  return {
+    id: savedObject.id,
+    name: attrs.name,
+    type: attrs.type,
+    config: attrs.config,
+    createdAt: attrs.createdAt,
+    updatedAt: attrs.updatedAt,
+    workflowId: attrs.workflowId,
+    workflowIds: attrs.workflowIds,
+    toolIds: attrs.toolIds,
+    features: attrs.features,
+    hasSecrets: !!attrs.secrets,
+  };
+}
+
+// Helper function to create workflows for a connector
+async function createWorkflowsForConnector(
+  connectorId: string,
+  connectorType: string,
+  features: string[],
+  savedObjectsClient: any,
+  workflowCreator: WorkflowCreatorService,
+  request: any,
+  logger: Logger
+): Promise<{ workflowId?: string; workflowIds: string[]; toolIds: string[] }> {
+  const workflowIds: string[] = [];
+  const toolIds: string[] = [];
+
+  try {
+    const spaceId = savedObjectsClient.getCurrentNamespace() ?? DEFAULT_NAMESPACE_STRING;
+
+    for (const feature of features) {
+      const createdWorkflowId = await workflowCreator.createWorkflowForConnector(
+        connectorId,
+        connectorType,
+        spaceId,
+        request,
+        feature
+      );
+      workflowIds.push(createdWorkflowId);
+      toolIds.push(`${connectorType}.${feature}`.slice(0, 64));
+    }
+
+    const workflowId = workflowIds[0];
+
+    await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connectorId, {
+      workflowId,
+      workflowIds,
+      toolIds,
+    });
+
+    return { workflowId, workflowIds, toolIds };
+  } catch (workflowError) {
+    logger.error(
+      `Failed to create workflow for connector ${connectorId}: ${
+        (workflowError as Error).message
+      }`
+    );
+    return { workflowIds, toolIds };
+  }
+}
+
+// Helper function to get default features for a connector type
+function getDefaultFeatures(connectorType: string): string[] {
+  return CONNECTOR_CONFIG[connectorType]?.defaultFeatures || [];
+}
 
 export function registerConnectorRoutes(
   router: IRouter,
@@ -42,39 +147,46 @@ export function registerConnectorRoutes(
     },
     async (context, request, response) => {
       const coreContext = await context.core;
+      const connectorType = WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE;
+      const connectorConfig = CONNECTOR_CONFIG[connectorType];
+
+      if (!connectorConfig?.oauthConfig) {
+        return response.customError({
+          statusCode: 400,
+          body: {
+            message: `OAuth not configured for connector type: ${connectorType}`,
+          },
+        });
+      }
+
       try {
         const savedObjectsClient = coreContext.savedObjects.client;
         const now = new Date().toISOString();
 
-        logger.info('HEYYYOOO');
-
         const savedObject = await savedObjectsClient.create(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, {
           name: 'Google Drive',
-          type: 'google_drive',
+          type: connectorType,
           config: { status: 'pending_oauth' },
           secrets: {},
-          features: ['search_files'],
+          features: connectorConfig.defaultFeatures,
           createdAt: now,
           updatedAt: now,
         });
 
-        const scope = [
-          'email',
-          'profile',
-          'https://www.googleapis.com/auth/drive.readonly',
-          'https://www.googleapis.com/auth/drive.metadata.readonly',
-        ];
+        const oauthUrl = `https://localhost:8052${connectorConfig.oauthConfig.initiatePath}`;
+        const authresponse = await axios.post(
+          oauthUrl,
+          {
+            scope: connectorConfig.oauthConfig.scopes,
+          },
+          {
+            httpsAgent: new https.Agent({
+              rejectUnauthorized: false,
+            }),
+          }
+        );
 
-        const oauthUrl = `https://localhost:8052/oauth/start/google`;
-        const authresponse = await axios.post(oauthUrl, {
-          scope
-        }, {
-          httpsAgent: new https.Agent({
-            rejectUnauthorized: false
-          })
-        });
-
-        const googleUrl = authresponse.data['auth_url']
+        const googleUrl = authresponse.data['auth_url'];
         const requestId = authresponse.data['request_id'];
 
         logger.info(`Google URL: ${googleUrl}`);
@@ -87,17 +199,17 @@ export function registerConnectorRoutes(
           },
         });
       } catch (error) {
-        logger.error(`Failed to initiate OAuth: ${error.message}`);
+        logger.error(`Failed to initiate OAuth: ${(error as Error).message}`);
         return response.customError({
           statusCode: 500,
           body: {
-            message: `Failed to initiate OAuth: ${error.message}`,
+            message: `Failed to initiate OAuth: ${(error as Error).message}`,
           },
         });
       }
     }
   );
-  
+
   // Handle OAuth callback - fetches secrets and updates connector
   router.get(
     {
@@ -117,13 +229,30 @@ export function registerConnectorRoutes(
     },
     async (context, request, response) => {
       const coreContext = await context.core;
-      
+
       try {
         const { request_id, connector_id } = request.query;
         const savedObjectsClient = coreContext.savedObjects.client;
 
+        // Get connector to determine type and config
+        const connector = await savedObjectsClient.get(
+          WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE,
+          connector_id
+        );
+        const connectorType = (connector.attributes as WorkplaceConnectorAttributes).type;
+        const connectorConfig = CONNECTOR_CONFIG[connectorType];
+
+        if (!connectorConfig?.oauthConfig) {
+          return response.customError({
+            statusCode: 400,
+            body: {
+              message: `OAuth not configured for connector type: ${connectorType}`,
+            },
+          });
+        }
+
         // Fetch secrets from OAuth service
-        const secretsUrl = `https://localhost:8052/oauth/fetch_request_secrets?request_id=${request_id}`;
+        const secretsUrl = `https://localhost:8052${connectorConfig.oauthConfig.fetchSecretsPath}?request_id=${request_id}`;
         const maxRetries = 5;
         const retryDelay = 2000;
         let secretsresponse;
@@ -133,15 +262,15 @@ export function registerConnectorRoutes(
           try {
             secretsresponse = await axios.get(secretsUrl, {
               headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
               },
               httpsAgent: new https.Agent({
-                rejectUnauthorized: false
-              })
+                rejectUnauthorized: false,
+              }),
             });
 
             access_token = secretsresponse.data['access_token'];
-            
+
             if (access_token) {
               logger.info(`Access token found on attempt ${attempt}`);
               break;
@@ -149,12 +278,12 @@ export function registerConnectorRoutes(
 
             if (attempt < maxRetries) {
               logger.info(`No access token found on attempt ${attempt}, retrying...`);
-              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              await new Promise((resolve) => setTimeout(resolve, retryDelay));
             }
           } catch (err) {
             if (attempt < maxRetries) {
               logger.warn(`Error fetching secrets on attempt ${attempt}, retrying...`, err);
-              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              await new Promise((resolve) => setTimeout(resolve, retryDelay));
             } else {
               throw err;
             }
@@ -170,10 +299,6 @@ export function registerConnectorRoutes(
 
         logger.info(`Secrets fetched for connector ${connector_id}`);
 
-        logger.info(`Access Token: ${access_token}`);
-        logger.info(`Refresh Token: ${refresh_token}`);
-        logger.info(`Expires In: ${expires_in}`);
-
         // Update connector with OAuth tokens
         await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connector_id, {
           secrets: {
@@ -186,32 +311,16 @@ export function registerConnectorRoutes(
         });
 
         // Create workflows for the connector
-        try {
-          const spaceId = savedObjectsClient.getCurrentNamespace() ?? DEFAULT_NAMESPACE_STRING;
-          const workflowIds: string[] = [];
-          const toolIds: string[] = [];
-
-          const features = ['search_files'];
-          for (const feature of features) {
-            const workflowId = await workflowCreator.createWorkflowForConnector(
-              connector_id,
-              'google_drive',
-              spaceId,
-              request,
-              feature
-            );
-            workflowIds.push(workflowId);
-            toolIds.push(`google_drive.${feature}`.slice(0, 64));
-          }
-
-          await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connector_id, {
-            workflowId: workflowIds[0],
-            workflowIds,
-            toolIds,
-          });
-        } catch (workflowError) {
-          logger.error(`Failed to create workflows: ${workflowError.message}`);
-        }
+        const features = connectorConfig.defaultFeatures;
+        await createWorkflowsForConnector(
+          connector_id,
+          connectorType,
+          features,
+          savedObjectsClient,
+          workflowCreator,
+          request,
+          logger
+        );
 
         return response.ok({
           body: {
@@ -220,11 +329,11 @@ export function registerConnectorRoutes(
           },
         });
       } catch (error) {
-        logger.error(`OAuth complete error: ${error.message}`);
+        logger.error(`OAuth complete error: ${(error as Error).message}`);
         return response.customError({
           statusCode: 500,
           body: {
-            message: error.message || 'Failed to complete OAuth',
+            message: (error as Error).message || 'Failed to complete OAuth',
           },
         });
       }
@@ -259,68 +368,34 @@ export function registerConnectorRoutes(
         const savedObjectsClient = coreContext.savedObjects.client;
         const now = new Date().toISOString();
 
+        // Use provided features or default features for connector type
+        const featuresToUse = features.length > 0 ? features : getDefaultFeatures(type);
+
         const savedObject = await savedObjectsClient.create(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, {
           name,
           type,
           config,
           secrets,
-          features,
+          features: featuresToUse,
           createdAt: now,
           updatedAt: now,
         });
-        let workflowId: string | undefined;
-        const workflowIds: string[] = [];
-        const toolIds: string[] = [];
-        try {
-          const spaceId = savedObjectsClient.getCurrentNamespace() ?? DEFAULT_NAMESPACE_STRING;
 
-          const featuresToCreate = features.length > 0 ? features : ['search_web'];
-          for (const feature of featuresToCreate) {
-            const createdWorkflowId = await workflowCreator.createWorkflowForConnector(
-              savedObject.id,
-              type,
-              spaceId,
-              request,
-              feature
-            );
-            workflowIds.push(createdWorkflowId);
-            toolIds.push(`${type}.${feature}`.slice(0, 64));
-          }
-          workflowId = workflowIds[0];
-          await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, savedObject.id, {
-            workflowId,
-            workflowIds,
-            toolIds,
-          });
-        } catch (workflowError) {
-          logger.error(
-            `Failed to create workflow for connector ${savedObject.id}: ${
-              (workflowError as Error).message
-            }`
-          );
-        }
+        // Create workflows for the connector
+        const { workflowId, workflowIds, toolIds } = await createWorkflowsForConnector(
+          savedObject.id,
+          type,
+          featuresToUse,
+          savedObjectsClient,
+          workflowCreator,
+          request,
+          logger
+        );
 
-        const attrs = savedObject.attributes as unknown as {
-          name: string;
-          type: string;
-          config: Record<string, unknown>;
-          features?: string[];
-          createdAt: string;
-          updatedAt: string;
-        };
-        const responseData: WorkplaceConnectorResponse = {
-          id: savedObject.id,
-          name: attrs.name,
-          type: attrs.type,
-          config: attrs.config,
-          createdAt: attrs.createdAt,
-          updatedAt: attrs.updatedAt,
-          workflowId,
-          workflowIds,
-          toolIds,
-          features: attrs.features,
-          hasSecrets: true,
-        };
+        const responseData = buildConnectorResponse(savedObject);
+        responseData.workflowId = workflowId;
+        responseData.workflowIds = workflowIds;
+        responseData.toolIds = toolIds;
 
         return response.ok({
           body: responseData,
@@ -329,7 +404,7 @@ export function registerConnectorRoutes(
         return response.customError({
           statusCode: 500,
           body: {
-            message: `Failed to create connector: ${error.message}`,
+            message: `Failed to create connector: ${(error as Error).message}`,
           },
         });
       }
@@ -358,38 +433,13 @@ export function registerConnectorRoutes(
         const savedObjectsClient = coreContext.savedObjects.client;
         const savedObject = await savedObjectsClient.get(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, id);
 
-        const attrs = savedObject.attributes as unknown as {
-          name: string;
-          type: string;
-          config: Record<string, unknown>;
-          createdAt: string;
-          updatedAt: string;
-          workflowId?: string;
-          workflowIds?: string[];
-          toolIds?: string[];
-          features?: string[];
-          secrets?: Record<string, unknown>;
-        };
-
-        const responseData: WorkplaceConnectorResponse = {
-          id: savedObject.id,
-          name: attrs.name,
-          type: attrs.type,
-          config: attrs.config,
-          createdAt: attrs.createdAt,
-          updatedAt: attrs.updatedAt,
-          workflowId: attrs.workflowId,
-          workflowIds: attrs.workflowIds,
-          toolIds: attrs.toolIds,
-          features: attrs.features,
-          hasSecrets: !!attrs.secrets,
-        };
+        const responseData = buildConnectorResponse(savedObject);
 
         return response.ok({
           body: responseData,
         });
       } catch (error) {
-        if (error.output?.statusCode === 404) {
+        if ((error as any).output?.statusCode === 404) {
           return response.notFound({
             body: {
               message: `Connector with ID ${id} not found`,
@@ -399,7 +449,7 @@ export function registerConnectorRoutes(
         return response.customError({
           statusCode: 500,
           body: {
-            message: `Failed to get connector: ${error.message}`,
+            message: `Failed to get connector: ${(error as Error).message}`,
           },
         });
       }
@@ -429,33 +479,7 @@ export function registerConnectorRoutes(
         });
 
         const connectors: WorkplaceConnectorResponse[] = findResult.saved_objects.map(
-          (savedObject) => {
-            const attrs = savedObject.attributes as unknown as {
-              name: string;
-              type: string;
-              config: Record<string, unknown>;
-              createdAt: string;
-              updatedAt: string;
-              workflowId?: string;
-              workflowIds?: string[];
-              toolIds?: string[];
-              features?: string[];
-              secrets?: Record<string, unknown>;
-            };
-            return {
-              id: savedObject.id,
-              name: attrs.name,
-              type: attrs.type,
-              config: attrs.config,
-              createdAt: attrs.createdAt,
-              updatedAt: attrs.updatedAt,
-              workflowId: attrs.workflowId,
-              workflowIds: attrs.workflowIds,
-              toolIds: attrs.toolIds,
-              features: attrs.features,
-              hasSecrets: !!attrs.secrets,
-            };
-          }
+          (savedObject) => buildConnectorResponse(savedObject)
         );
 
         return response.ok({
@@ -468,7 +492,7 @@ export function registerConnectorRoutes(
         return response.customError({
           statusCode: 500,
           body: {
-            message: `Failed to list connectors: ${error.message}`,
+            message: `Failed to list connectors: ${(error as Error).message}`,
           },
         });
       }
@@ -508,32 +532,13 @@ export function registerConnectorRoutes(
           }
         );
 
-        const attrs = savedObject.attributes as unknown as {
-          name: string;
-          type: string;
-          config: Record<string, unknown>;
-          createdAt: string;
-          updatedAt: string;
-          workflowId?: string;
-          secrets?: Record<string, unknown>;
-        };
-
-        const responseData: WorkplaceConnectorResponse = {
-          id: savedObject.id,
-          name: attrs.name,
-          type: attrs.type,
-          config: attrs.config,
-          createdAt: attrs.createdAt,
-          updatedAt: attrs.updatedAt,
-          workflowId: attrs.workflowId,
-          hasSecrets: !!attrs.secrets,
-        };
+        const responseData = buildConnectorResponse(savedObject);
 
         return response.ok({
           body: responseData,
         });
       } catch (error) {
-        if (error.output?.statusCode === 404) {
+        if ((error as any).output?.statusCode === 404) {
           return response.notFound({
             body: {
               message: `Connector with ID ${id} not found`,
@@ -543,7 +548,7 @@ export function registerConnectorRoutes(
         return response.customError({
           statusCode: 500,
           body: {
-            message: `Failed to update connector: ${error.message}`,
+            message: `Failed to update connector: ${(error as Error).message}`,
           },
         });
       }
