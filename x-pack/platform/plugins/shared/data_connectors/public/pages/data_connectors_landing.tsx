@@ -40,19 +40,38 @@ interface ConnectorTileData {
   description: string;
   icon: string; // Image URL or path
   defaultFeatures: string[];
-  flyoutComponent?: React.ComponentType<{
-    connectorType: string;
-    connectorName: string;
-    onClose: () => void;
-    onSave: (data: any) => Promise<void>;
-    isEditing: boolean;
-  }>;
-  customFlyoutComponent?: React.ComponentType<{
-    onClose: () => void;
-    isEditing: boolean;
-    onConnectionSuccess: () => void;
-  }>;
+  flyoutComponentId?: string; // Identifier for the flyout component
+  customFlyoutComponentId?: string; // Identifier for custom flyout component
 }
+
+// Component registry - maps component IDs to actual React components
+type StandardFlyoutProps = {
+  connectorType: string;
+  connectorName: string;
+  onClose: () => void;
+  onSave: (data: any) => Promise<void>;
+  isEditing: boolean;
+};
+
+type CustomFlyoutProps = {
+  onClose: () => void;
+  isEditing: boolean;
+  onConnectionSuccess: () => void;
+};
+
+const FLYOUT_COMPONENT_REGISTRY: Record<
+  string,
+  React.ComponentType<StandardFlyoutProps>
+> = {
+  connector_flyout: ConnectorFlyout,
+};
+
+const CUSTOM_FLYOUT_COMPONENT_REGISTRY: Record<
+  string,
+  React.ComponentType<CustomFlyoutProps>
+> = {
+  google_drive_connector_flyout: GoogleDriveConnectorFlyout,
+};
 
 interface ConnectorSaveConfig {
   secretsMapping?: Record<string, string>; // Maps input field names to secret field names
@@ -77,6 +96,7 @@ const CONNECTOR_SAVE_CONFIG: Record<string, ConnectorSaveConfig> = {
 };
 
 // Hardcoded data - eventually this will come from an API
+// All values are now JavaScript primitives (strings, arrays, objects)
 const CONNECTOR_TILES_DATA: ConnectorTileData[] = [
   {
     connectorType: WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH,
@@ -84,7 +104,7 @@ const CONNECTOR_TILES_DATA: ConnectorTileData[] = [
     description: 'Connect to Brave Search API for web search capabilities.',
     icon: '/plugins/dataConnectors/assets/brave_logo.svg', // Replace with actual image path
     defaultFeatures: ['search_web'],
-    flyoutComponent: ConnectorFlyout,
+    flyoutComponentId: 'connector_flyout',
   },
   {
     connectorType: WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE,
@@ -92,7 +112,7 @@ const CONNECTOR_TILES_DATA: ConnectorTileData[] = [
     description: 'Connect to Google Drive to search and access files using OAuth.',
     icon: '/plugins/dataConnectors/assets/google_drive_logo.svg', // Replace with actual image path
     defaultFeatures: ['search_files'],
-    customFlyoutComponent: GoogleDriveConnectorFlyout,
+    customFlyoutComponentId: 'google_drive_connector_flyout',
   },
 ];
 
@@ -323,28 +343,34 @@ export const DataConnectorsLandingPage = () => {
           const connector = connectorsByType.get(selectedConnectorType);
           const isEditing = Boolean(connector);
 
-          if (tileData.customFlyoutComponent) {
-            const CustomFlyout = tileData.customFlyoutComponent;
-            return (
-              <CustomFlyout
-                onClose={handleCloseFlyout}
-                isEditing={isEditing}
-                onConnectionSuccess={refreshConnectors}
-              />
-            );
+          // Look up custom flyout component from registry
+          if (tileData.customFlyoutComponentId) {
+            const CustomFlyout = CUSTOM_FLYOUT_COMPONENT_REGISTRY[tileData.customFlyoutComponentId];
+            if (CustomFlyout) {
+              return (
+                <CustomFlyout
+                  onClose={handleCloseFlyout}
+                  isEditing={isEditing}
+                  onConnectionSuccess={refreshConnectors}
+                />
+              );
+            }
           }
 
-          if (tileData.flyoutComponent) {
-            const Flyout = tileData.flyoutComponent;
-            return (
-              <Flyout
-                connectorType={selectedConnectorType}
-                connectorName={tileData.title}
-                onClose={handleCloseFlyout}
-                onSave={(data: any) => handleSaveConnector(tileData, data)}
-                isEditing={isEditing}
-              />
-            );
+          // Look up standard flyout component from registry
+          if (tileData.flyoutComponentId) {
+            const Flyout = FLYOUT_COMPONENT_REGISTRY[tileData.flyoutComponentId];
+            if (Flyout) {
+              return (
+                <Flyout
+                  connectorType={selectedConnectorType}
+                  connectorName={tileData.title}
+                  onClose={handleCloseFlyout}
+                  onSave={(data: any) => handleSaveConnector(tileData, data)}
+                  isEditing={isEditing}
+                />
+              );
+            }
           }
 
           return null;
