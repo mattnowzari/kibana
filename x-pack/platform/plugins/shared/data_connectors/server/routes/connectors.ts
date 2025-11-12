@@ -8,7 +8,8 @@
 import axios from 'axios';
 import https from 'https';
 import { schema } from '@kbn/config-schema';
-import type { IRouter, Logger } from '@kbn/core/server';
+import type { IRouter, Logger, KibanaRequest } from '@kbn/core/server';
+import type { SavedObjectsClientContract } from '@kbn/core-saved-objects-api-server';
 import { DEFAULT_NAMESPACE_STRING } from '@kbn/core-saved-objects-utils-server';
 import { WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE } from '../saved_objects';
 import type {
@@ -57,9 +58,10 @@ const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
 };
 
 // Helper function to build response from saved object
-function buildConnectorResponse(
-  savedObject: { id: string; attributes: WorkplaceConnectorAttributes }
-): WorkplaceConnectorResponse {
+function buildConnectorResponse(savedObject: {
+  id: string;
+  attributes: WorkplaceConnectorAttributes;
+}): WorkplaceConnectorResponse {
   const attrs = savedObject.attributes;
   return {
     id: savedObject.id,
@@ -81,9 +83,9 @@ async function createWorkflowsForConnector(
   connectorId: string,
   connectorType: string,
   features: string[],
-  savedObjectsClient: any,
+  savedObjectsClient: SavedObjectsClientContract,
   workflowCreator: WorkflowCreatorService,
-  request: any,
+  request: KibanaRequest,
   logger: Logger
 ): Promise<{ workflowId?: string; workflowIds: string[]; toolIds: string[] }> {
   const workflowIds: string[] = [];
@@ -115,9 +117,7 @@ async function createWorkflowsForConnector(
     return { workflowId, workflowIds, toolIds };
   } catch (workflowError) {
     logger.error(
-      `Failed to create workflow for connector ${connectorId}: ${
-        (workflowError as Error).message
-      }`
+      `Failed to create workflow for connector ${connectorId}: ${(workflowError as Error).message}`
     );
     return { workflowIds, toolIds };
   }
@@ -174,7 +174,7 @@ export function registerConnectorRoutes(
         });
 
         const oauthUrl = `https://localhost:8052${connectorConfig.oauthConfig.initiatePath}`;
-        const authresponse = await axios.post(
+        const authresponse = await axios.post<{ auth_url: string; request_id: string }>(
           oauthUrl,
           {
             scope: connectorConfig.oauthConfig.scopes,
@@ -186,8 +186,8 @@ export function registerConnectorRoutes(
           }
         );
 
-        const googleUrl = authresponse.data['auth_url'];
-        const requestId = authresponse.data['request_id'];
+        const googleUrl = authresponse.data.auth_url;
+        const requestId = authresponse.data.request_id;
 
         logger.info(`Google URL: ${googleUrl}`);
 
@@ -255,12 +255,17 @@ export function registerConnectorRoutes(
         const secretsUrl = `https://localhost:8052${connectorConfig.oauthConfig.fetchSecretsPath}?request_id=${request_id}`;
         const maxRetries = 5;
         const retryDelay = 2000;
-        let secretsresponse;
+        interface OAuthSecretsResponse {
+          access_token?: string;
+          refresh_token?: string;
+          expires_in?: string;
+        }
+        let secretsresponse: axios.AxiosResponse<OAuthSecretsResponse> | undefined;
         let access_token: string | undefined;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
-            secretsresponse = await axios.get(secretsUrl, {
+            secretsresponse = await axios.get<OAuthSecretsResponse>(secretsUrl, {
               headers: {
                 'Content-Type': 'application/json',
               },
@@ -269,7 +274,7 @@ export function registerConnectorRoutes(
               }),
             });
 
-            access_token = secretsresponse.data['access_token'];
+            access_token = secretsresponse.data.access_token;
 
             if (access_token) {
               logger.info(`Access token found on attempt ${attempt}`);
@@ -290,12 +295,12 @@ export function registerConnectorRoutes(
           }
         }
 
-        if (!access_token) {
+        if (!access_token || !secretsresponse) {
           throw new Error('Access token not found after 5 attempts');
         }
 
-        const refresh_token = secretsresponse!.data['refresh_token'];
-        const expires_in = secretsresponse!.data['expires_in'];
+        const refresh_token = secretsresponse.data.refresh_token;
+        const expires_in = secretsresponse.data.expires_in;
 
         logger.info(`Secrets fetched for connector ${connector_id}`);
 
@@ -392,10 +397,12 @@ export function registerConnectorRoutes(
           logger
         );
 
-        const responseData = buildConnectorResponse(savedObject);
-        responseData.workflowId = workflowId;
-        responseData.workflowIds = workflowIds;
-        responseData.toolIds = toolIds;
+        const responseData: WorkplaceConnectorResponse = {
+          ...buildConnectorResponse(savedObject),
+          workflowId,
+          workflowIds,
+          toolIds,
+        };
 
         return response.ok({
           body: responseData,
@@ -616,7 +623,7 @@ export function registerConnectorRoutes(
           },
         });
       } catch (error) {
-        if (error.output?.statusCode === 404) {
+        if ((error as any).output?.statusCode === 404) {
           return response.notFound({
             body: {
               message: `Connector with ID ${id} not found`,
@@ -626,7 +633,7 @@ export function registerConnectorRoutes(
         return response.customError({
           statusCode: 500,
           body: {
-            message: `Failed to delete connector: ${error.message}`,
+            message: `Failed to delete connector: ${(error as Error).message}`,
           },
         });
       }
