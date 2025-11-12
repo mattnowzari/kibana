@@ -102,7 +102,7 @@ const CONNECTOR_TILES_DATA: ConnectorTileData[] = [
     connectorType: WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH,
     title: 'Brave Search',
     description: 'Connect to Brave Search API for web search capabilities.',
-    icon: '/plugins/dataConnectors/assets/brave_logo.svg', // Replace with actual image path
+    icon: '/plugins/dataConnectors/assets/brave_logo.png',
     defaultFeatures: ['search_web'],
     flyoutComponentId: 'connector_flyout',
   },
@@ -110,7 +110,7 @@ const CONNECTOR_TILES_DATA: ConnectorTileData[] = [
     connectorType: WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE,
     title: 'Google Drive',
     description: 'Connect to Google Drive to search and access files using OAuth.',
-    icon: '/plugins/dataConnectors/assets/google_drive_logo.svg', // Replace with actual image path
+    icon: '/plugins/dataConnectors/assets/google_drive_logo.png',
     defaultFeatures: ['search_files'],
     customFlyoutComponentId: 'google_drive_connector_flyout',
   },
@@ -177,6 +177,9 @@ export const DataConnectorsLandingPage = () => {
     };
 
     await createConnector(connectorData);
+    // Explicitly refresh connectors to ensure state is updated
+    await refreshConnectors();
+    handleCloseFlyout();
   };
 
   const handleCloseFlyout = () => {
