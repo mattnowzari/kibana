@@ -42,6 +42,11 @@ interface ConnectorTileData {
   defaultFeatures: string[];
   flyoutComponentId?: string; // Identifier for the flyout component
   customFlyoutComponentId?: string; // Identifier for custom flyout component
+  saveConfig?: {
+    secretsMapping?: Record<string, string>; // Maps input field names to secret field names
+    config?: Record<string, any>; // Static config values
+    featuresField?: string; // Field name in input data that contains features array
+  };
 }
 
 // Component registry - maps component IDs to actual React components
@@ -67,55 +72,14 @@ const CUSTOM_FLYOUT_COMPONENT_REGISTRY: Record<string, React.ComponentType<Custo
   google_drive_connector_flyout: GoogleDriveConnectorFlyout,
 };
 
-interface ConnectorSaveConfig {
-  secretsMapping?: Record<string, string>; // Maps input field names to secret field names
-  config?: Record<string, any>; // Static config values
-  featuresField?: string; // Field name in input data that contains features array
-}
-
-// Hardcoded save configuration - eventually this will come from an API
-const CONNECTOR_SAVE_CONFIG: Record<string, ConnectorSaveConfig> = {
-  [WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH]: {
-    secretsMapping: {
-      apiKey: 'api_key', // Maps input.apiKey to secrets.api_key
-    },
-    config: {},
-    featuresField: 'features',
-  },
-  [WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE]: {
-    secretsMapping: {},
-    config: {},
-    featuresField: 'features',
-  },
-};
-
-// Hardcoded data - eventually this will come from an API
-// All values are now JavaScript primitives (strings, arrays, objects)
-const CONNECTOR_TILES_DATA: ConnectorTileData[] = [
-  {
-    connectorType: WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH,
-    title: 'Brave Search',
-    description: 'Connect to Brave Search API for web search capabilities.',
-    icon: '/plugins/dataConnectors/assets/brave_logo.png',
-    defaultFeatures: ['search_web'],
-    flyoutComponentId: 'connector_flyout',
-  },
-  {
-    connectorType: WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE,
-    title: 'Google Drive',
-    description: 'Connect to Google Drive to search and access files using OAuth.',
-    icon: '/plugins/dataConnectors/assets/google_drive_logo.png',
-    defaultFeatures: ['search_files'],
-    customFlyoutComponentId: 'google_drive_connector_flyout',
-  },
-];
-
 export const DataConnectorsLandingPage = () => {
   const { services } = useKibana();
   const httpClient = services.http;
 
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
   const [selectedConnectorType, setSelectedConnectorType] = useState<string | null>(null);
+  const [connectorTilesData, setConnectorTilesData] = useState<ConnectorTileData[]>([]);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
 
   const { euiTheme } = useEuiTheme();
   const {
@@ -126,6 +90,25 @@ export const DataConnectorsLandingPage = () => {
     connectors,
     refreshConnectors,
   } = useConnectors(httpClient);
+
+  // Fetch connector configuration from API
+  React.useEffect(() => {
+    const fetchConnectorConfig = async () => {
+      try {
+        const response = await httpClient.get<{ connectors: ConnectorTileData[] }>(
+          '/api/workplace_connectors/config'
+        );
+        setConnectorTilesData(response.connectors || []);
+      } catch (error) {
+        // Fallback to empty array on error
+        setConnectorTilesData([]);
+      } finally {
+        setIsLoadingConfig(false);
+      }
+    };
+
+    fetchConnectorConfig();
+  }, [httpClient]);
 
   // Create a map of connector types to their connector instances
   const connectorsByType = useMemo(() => {
@@ -149,7 +132,7 @@ export const DataConnectorsLandingPage = () => {
   const handleSaveConnector = async (tileData: ConnectorTileData, data: any) => {
     if (!selectedConnectorType) return;
 
-    const saveConfig = CONNECTOR_SAVE_CONFIG[selectedConnectorType];
+    const saveConfig = tileData.saveConfig;
     if (!saveConfig) return;
 
     // Build secrets from mapping
@@ -331,14 +314,20 @@ export const DataConnectorsLandingPage = () => {
         <EuiSpacer size="xl" />
 
         <EuiFlexGrid columns={4} gutterSize="m">
-          {CONNECTOR_TILES_DATA.map((tileData) => renderConnectorTile(tileData))}
+          {isLoadingConfig ? (
+            <EuiFlexItem>
+              <EuiText>Loading connectors...</EuiText>
+            </EuiFlexItem>
+          ) : (
+            connectorTilesData.map((tileData) => renderConnectorTile(tileData))
+          )}
         </EuiFlexGrid>
       </KibanaPageTemplate.Section>
 
       {isFlyoutOpen &&
         selectedConnectorType &&
         (() => {
-          const tileData = CONNECTOR_TILES_DATA.find(
+          const tileData = connectorTilesData.find(
             (tile) => tile.connectorType === selectedConnectorType
           );
           if (!tileData) return null;

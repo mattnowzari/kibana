@@ -25,42 +25,7 @@ import {
   connectorIdSchema,
 } from './schemas';
 import type { WorkflowCreatorService } from '../services/workflow_creator';
-
-// Connector configuration - eventually this will come from an API
-interface ConnectorConfig {
-  name: string;
-  defaultFeatures: string[];
-  oauthConfig?: {
-    provider: string;
-    scopes: string[];
-    initiatePath: string;
-    fetchSecretsPath: string;
-    oauthBaseUrl?: string; // OAuth service base URL
-  };
-}
-
-const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
-  brave_search: {
-    name: 'Brave Search',
-    defaultFeatures: ['search_web'],
-  },
-  google_drive: {
-    name: 'Google Drive',
-    defaultFeatures: ['search_files'],
-    oauthConfig: {
-      provider: 'google',
-      scopes: [
-        'email',
-        'profile',
-        'https://www.googleapis.com/auth/drive.readonly',
-        'https://www.googleapis.com/auth/drive.metadata.readonly',
-      ],
-      initiatePath: '/oauth/start/google',
-      fetchSecretsPath: '/oauth/fetch_request_secrets',
-      oauthBaseUrl: 'https://localhost:8052',
-    },
-  },
-};
+import { CONNECTOR_CONFIG, type ConnectorConfig } from '../data/connector_config';
 
 // Helper function to build response from saved object
 function buildConnectorResponse(savedObject: {
@@ -218,6 +183,48 @@ export function registerConnectorRoutes(
   workflowCreator: WorkflowCreatorService,
   logger: Logger
 ) {
+  // Get connector configurations for UI
+  router.get(
+    {
+      path: '/api/workplace_connectors/config',
+      validate: {},
+      security: {
+        authz: {
+          enabled: false,
+          reason: 'This route is opted out from authorization',
+        },
+      },
+    },
+    async (context, request, response) => {
+      try {
+        // Transform config to include connectorType and match frontend format
+        const connectors = Object.entries(CONNECTOR_CONFIG).map(([connectorType, config]) => ({
+          connectorType,
+          title: config.name,
+          description: config.description,
+          icon: config.icon,
+          defaultFeatures: config.defaultFeatures,
+          flyoutComponentId: config.flyoutComponentId,
+          customFlyoutComponentId: config.customFlyoutComponentId,
+          saveConfig: config.saveConfig,
+        }));
+
+        return response.ok({
+          body: {
+            connectors,
+          },
+        });
+      } catch (error) {
+        return response.customError({
+          statusCode: 500,
+          body: {
+            message: `Failed to get connector config: ${(error as Error).message}`,
+          },
+        });
+      }
+    }
+  );
+
   // Initiate OAuth for connectors - dynamic route based on provider
   router.post(
     {
@@ -325,6 +332,8 @@ export function registerConnectorRoutes(
       },
     },
     async (context, request, response) => {
+      logger.info(`Oauth response received`);
+
       const coreContext = await context.core;
 
       try {
