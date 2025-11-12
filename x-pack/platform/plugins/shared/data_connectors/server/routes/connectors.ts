@@ -216,7 +216,7 @@ export function registerConnectorRoutes(
       path: '/api/workplace_connectors/oauth/complete',
       validate: {
         query: schema.object({
-          request_id: schema.string(),
+          requestId: schema.string(),
           connector_id: schema.string(),
         }),
       },
@@ -231,13 +231,13 @@ export function registerConnectorRoutes(
       const coreContext = await context.core;
 
       try {
-        const { request_id, connector_id } = request.query;
+        const { requestId, connectorId } = request.query;
         const savedObjectsClient = coreContext.savedObjects.client;
 
         // Get connector to determine type and config
         const connector = await savedObjectsClient.get(
           WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE,
-          connector_id
+          connectorId
         );
         const connectorType = (connector.attributes as WorkplaceConnectorAttributes).type;
         const connectorConfig = CONNECTOR_CONFIG[connectorType];
@@ -252,7 +252,7 @@ export function registerConnectorRoutes(
         }
 
         // Fetch secrets from OAuth service
-        const secretsUrl = `https://localhost:8052${connectorConfig.oauthConfig.fetchSecretsPath}?request_id=${request_id}`;
+        const secretsUrl = `https://localhost:8052${connectorConfig.oauthConfig.fetchSecretsPath}?request_id=${requestId}`;
         const maxRetries = 5;
         const retryDelay = 2000;
         interface OAuthSecretsResponse {
@@ -261,7 +261,7 @@ export function registerConnectorRoutes(
           expires_in?: string;
         }
         let secretsresponse: axios.AxiosResponse<OAuthSecretsResponse> | undefined;
-        let access_token: string | undefined;
+        let accessToken: string | undefined;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -302,10 +302,10 @@ export function registerConnectorRoutes(
         const refresh_token = secretsresponse.data.refresh_token;
         const expires_in = secretsresponse.data.expires_in;
 
-        logger.info(`Secrets fetched for connector ${connector_id}`);
+        logger.info(`Secrets fetched for connector ${connectorId}`);
 
         // Update connector with OAuth tokens
-        await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connector_id, {
+        await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connectorId, {
           secrets: {
             access_token,
             refresh_token: refresh_token || '',
@@ -318,7 +318,7 @@ export function registerConnectorRoutes(
         // Create workflows for the connector
         const features = connectorConfig.defaultFeatures;
         await createWorkflowsForConnector(
-          connector_id,
+          connectorId,
           connectorType,
           features,
           savedObjectsClient,
@@ -330,7 +330,7 @@ export function registerConnectorRoutes(
         return response.ok({
           body: {
             success: true,
-            connector_id,
+            connectorId,
           },
         });
       } catch (error) {
