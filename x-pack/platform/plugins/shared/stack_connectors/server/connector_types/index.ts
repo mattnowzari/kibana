@@ -37,7 +37,6 @@ import { getConnectorType as getXSOARConnectorType } from './xsoar';
 import { getOpsgenieConnectorType } from './opsgenie';
 import { getSentinelOneConnectorType } from './sentinelone';
 import { getCrowdstrikeConnectorType } from './crowdstrike';
-import { getConnectorType as getMcpConnectorType } from './mcp';
 import type { ExperimentalFeatures } from '../../common/experimental_features';
 
 export { ConnectorTypeId as XmattersConnectorTypeId } from './xmatters';
@@ -70,7 +69,6 @@ export function registerConnectorTypes({
   actions.registerType(getJiraConnectorType());
   actions.registerType(getTeamsConnectorType());
   actions.registerType(getTorqConnectorType());
-  actions.registerType(getMcpConnectorType());
 
   actions.registerSubActionConnectorType(getOpsgenieConnectorType());
   actions.registerSubActionConnectorType(getJiraServiceManagementConnectorType());

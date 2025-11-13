@@ -11,14 +11,11 @@ import { z } from '@kbn/zod';
 export const ConfigSchema = z
   .object({
     url: z.string().url(),
+    selected_tools: z.array(z.string()).min(1),
   })
   .strict();
 
-export const SecretsSchema = z
-  .object({
-    apiKey: z.string().optional(),
-  })
-  .strict();
+export const SecretsSchema = z.object({}).strict();
 
 export const ParamsSchema = z
   .object({

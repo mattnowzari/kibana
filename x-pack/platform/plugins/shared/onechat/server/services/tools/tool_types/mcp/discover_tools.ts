@@ -26,7 +26,8 @@ export async function discoverMcpTools(
     const result = await actionsClient.execute({
       actionId: connectorId,
       params: {
-        method: 'tools/list',
+        subAction: 'listTools',
+        subActionParams: {},
       },
     });
 

@@ -20,8 +20,7 @@ export const McpConfiguration = () => {
   const [hasToolsAvailable, setHasToolsAvailable] = useState(false);
 
   // Only show validation error if tools are available but none are selected
-  const shouldShowCapabilityError =
-    hasToolsAvailable && !!errors.selected_capabilities;
+  const shouldShowCapabilityError = hasToolsAvailable && !!errors.selected_capabilities;
 
   return (
     <>
@@ -44,4 +43,3 @@ export const McpConfiguration = () => {
     </>
   );
 };
-

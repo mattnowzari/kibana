@@ -43,6 +43,7 @@ import type {
 import { openConversationFlyout } from './flyout/open_conversation_flyout';
 import type { EmbeddableConversationProps } from './embeddable/types';
 import type { OpenConversationFlyoutOptions } from './flyout/types';
+import { getConnectorType as getMcpConnectorType } from './connector_types/mcp';
 
 export class OnechatPlugin
   implements
@@ -92,6 +93,13 @@ export class OnechatPlugin
 
       registerAnalytics({ analytics: core.analytics });
       registerLocators(deps.share);
+      // Register MCP connector type model with Triggers & Actions UI
+      try {
+        deps.triggersActionsUi.actionTypeRegistry.register(getMcpConnectorType());
+        this.logger.debug('Registered MCP connector type model in onechat');
+      } catch (e) {
+        this.logger.warn(`Failed to register MCP connector type model: ${e?.message}`);
+      }
     }
 
     try {

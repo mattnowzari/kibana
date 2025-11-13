@@ -92,20 +92,6 @@ export const NO_TOOLS_FOUND_MESSAGE = i18n.translate(
   }
 );
 
-export const METHOD_LABEL = i18n.translate(
-  'xpack.stackConnectors.components.mcp.methodTextFieldLabel',
-  {
-    defaultMessage: 'Method',
-  }
-);
-
-export const METHOD_REQUIRED = i18n.translate(
-  'xpack.stackConnectors.components.mcp.error.requiredMethodText',
-  {
-    defaultMessage: 'Method is required.',
-  }
-);
-
 export const TOOL_NAME_LABEL = i18n.translate(
   'xpack.stackConnectors.components.mcp.toolNameLabel',
   {
@@ -133,4 +119,3 @@ export const TOOL_ARGUMENTS_LABEL = i18n.translate(
     defaultMessage: 'Tool Arguments',
   }
 );
-

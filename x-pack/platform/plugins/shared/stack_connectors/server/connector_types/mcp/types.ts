@@ -5,7 +5,10 @@
  * 2.0.
  */
 
-import type { ActionType as ConnectorType, ActionTypeExecutorOptions as ConnectorTypeExecutorOptions } from '@kbn/actions-plugin/server/types';
+import type {
+  ActionType as ConnectorType,
+  ActionTypeExecutorOptions as ConnectorTypeExecutorOptions,
+} from '@kbn/actions-plugin/server/types';
 import type {
   ConnectorTypeConfigType,
   ConnectorTypeSecretsType,
@@ -24,4 +27,3 @@ export type McpConnectorTypeExecutorOptions = ConnectorTypeExecutorOptions<
   ConnectorTypeSecretsType,
   ActionParamsType
 >;
-

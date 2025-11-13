@@ -12,7 +12,6 @@ import type {
   GenericValidationResult,
 } from '@kbn/triggers-actions-ui-plugin/public/types';
 import { CONNECTOR_ID } from '@kbn/connector-schemas/mcp/constants';
-import type { ConnectorTypeConfigType, ConnectorTypeSecretsType } from '@kbn/connector-schemas/mcp';
 
 interface McpActionParams {
   subAction: string;
@@ -22,11 +21,7 @@ interface McpActionParams {
   };
 }
 
-export function getConnectorType(): ConnectorTypeModel<
-  ConnectorTypeConfigType,
-  ConnectorTypeSecretsType,
-  McpActionParams
-> {
+export function getConnectorType(): ConnectorTypeModel<unknown, unknown, McpActionParams> {
   return {
     id: CONNECTOR_ID,
     iconClass: 'logoWebhook',

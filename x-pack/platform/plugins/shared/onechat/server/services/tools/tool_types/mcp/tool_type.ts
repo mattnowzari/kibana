@@ -35,26 +35,17 @@ export const getMcpToolType = ({
         throw new Error('Actions plugin is not available');
       }
 
-      // For MCP tools, we need to discover the tools and create handlers for each selected capability
-      // For now, we'll create a single tool that can route to different capabilities
+      // Each MCP tool maps to a single tool_name from the connector
       return {
         getHandler: () => {
           return async (params, context) => {
             const actionsClient = await actions.getActionsClientWithRequest(request);
-            const { toolName } = params as { toolName: string; [key: string]: any };
-
-            if (!toolName) {
-              throw new Error('toolName is required for MCP tools');
-            }
-
-            if (!config.selected_capabilities.includes(toolName)) {
-              throw new Error(`Tool "${toolName}" is not in the selected capabilities`);
-            }
-
-            const toolParams = { ...params };
-            delete toolParams.toolName;
-
-            const results = await executeMcpTool(config.connector_id, toolName, toolParams, actionsClient);
+            const results = await executeMcpTool(
+              config.connector_id,
+              config.tool_name,
+              params,
+              actionsClient
+            );
             return { results };
           };
         },
@@ -66,40 +57,15 @@ export const getMcpToolType = ({
 
           const actionsClient = await actions.getActionsClientWithRequest(request);
           const availableTools = await discoverMcpTools(config.connector_id, actionsClient);
-          const selectedTools = availableTools.filter((t) =>
-            config.selected_capabilities.includes(t.name)
-          );
+          const toolDef = availableTools.find((t) => t.name === config.tool_name);
 
-          // For now, return a schema that includes toolName and the union of all selected tool schemas
-          // In the future, we could generate separate tools for each capability
-          const toolNameEnum = z.enum(
-            config.selected_capabilities as [string, ...string[]]
-          ).describe('The name of the MCP tool to call');
-
-          if (selectedTools.length === 0) {
-            return z.object({
-              toolName: toolNameEnum,
-            });
+          if (!toolDef) {
+            // Tool not found - return empty schema
+            return z.object({});
           }
 
-          // Merge all schemas - this is a simplified approach
-          // In production, you'd want to generate separate tools
-          const mergedShape: Record<string, z.ZodTypeAny> = {
-            toolName: toolNameEnum,
-          };
-
-          // Add properties from all selected tools (with optional modifier since we don't know which tool is being called)
-          for (const tool of selectedTools) {
-            const toolSchema = convertMcpSchemaToZod(tool.inputSchema);
-            const toolShape = toolSchema.shape;
-            for (const [key, zodValue] of Object.entries(toolShape)) {
-              if (!mergedShape[key]) {
-                mergedShape[key] = (zodValue as z.ZodTypeAny).optional();
-              }
-            }
-          }
-
-          return z.object(mergedShape);
+          // Convert the tool's input schema to zod
+          return convertMcpSchemaToZod(toolDef.inputSchema);
         },
       };
     },
@@ -134,38 +100,30 @@ export const getMcpToolType = ({
         );
       }
 
-      // Discover tools to check availability
+      // Validate tool_name exists on the server
       let availableTools;
       try {
         availableTools = await discoverMcpTools(config.connector_id, actionsClient);
       } catch (error: any) {
         // If tool discovery fails, we still allow saving (user might fix the connector later)
-        // But if capabilities are provided, we should validate them
-        if (config.selected_capabilities && config.selected_capabilities.length > 0) {
+        // But if tool_name is provided, we should validate it
+        if (config.tool_name) {
           throw new Error(
-            `Failed to discover MCP tools: ${error.message}. Cannot validate selected capabilities.`
+            `Failed to discover MCP tools: ${error.message}. Cannot validate tool name.`
           );
         }
-        // No capabilities selected and discovery failed - allow saving
+        // No tool_name provided and discovery failed - allow saving
         return config;
       }
 
-      // Only require capabilities if tools are available
-      if (availableTools.length > 0) {
-        if (!config.selected_capabilities || config.selected_capabilities.length === 0) {
-          throw new Error('At least one MCP capability must be selected');
-        }
+      // Validate tool_name exists
+      if (!config.tool_name) {
+        throw new Error('Tool name is required');
+      }
 
-        // Validate selected capabilities exist
-        const availableToolNames = new Set(availableTools.map((t) => t.name));
-        for (const capability of config.selected_capabilities) {
-          if (!availableToolNames.has(capability)) {
-            throw new Error(`MCP capability "${capability}" not found on server`);
-          }
-        }
-      } else {
-        // No tools available - capabilities are optional
-        // User can save the tool even if no tools are found
+      const availableToolNames = new Set(availableTools.map((t) => t.name));
+      if (!availableToolNames.has(config.tool_name)) {
+        throw new Error(`MCP tool "${config.tool_name}" not found on server`);
       }
 
       return config;
@@ -203,15 +161,13 @@ export const getMcpToolType = ({
         );
       }
 
-      // Validate selected capabilities if provided
-      if (mergedConfig.selected_capabilities && mergedConfig.selected_capabilities.length > 0) {
+      // Validate tool_name if provided
+      if (mergedConfig.tool_name) {
         const availableTools = await discoverMcpTools(mergedConfig.connector_id, actionsClient);
         const availableToolNames = new Set(availableTools.map((t) => t.name));
 
-        for (const capability of mergedConfig.selected_capabilities) {
-          if (!availableToolNames.has(capability)) {
-            throw new Error(`MCP capability "${capability}" not found on server`);
-          }
+        if (!availableToolNames.has(mergedConfig.tool_name)) {
+          throw new Error(`MCP tool "${mergedConfig.tool_name}" not found on server`);
         }
       }
 

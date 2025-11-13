@@ -110,7 +110,6 @@ const McpActionConnectorFields: React.FunctionComponent<ActionConnectorFieldsPro
       setIsConnected(true);
       setIsConnecting(false);
 
-      // If no tools found, clear selection
       if (!response.tools || response.tools.length === 0) {
         setSelectedToolIds({});
       }

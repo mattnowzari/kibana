@@ -53,7 +53,7 @@ export interface WorkflowToolFormData extends BaseToolFormData {
 export interface McpToolFormData extends BaseToolFormData {
   type: ToolType.mcp;
   connector_id: string;
-  selected_capabilities: string[];
+  tool_name: string;
 }
 
 export type ToolFormData =

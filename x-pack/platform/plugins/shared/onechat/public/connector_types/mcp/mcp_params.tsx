@@ -29,7 +29,6 @@ const McpParamsFields: React.FunctionComponent<ActionParamsProps<McpActionParams
 }) => {
   const { subAction, subActionParams } = actionParams;
 
-  // Default to callTool subAction
   useEffect(() => {
     if (!subAction) {
       editAction('subAction', 'callTool', index);
@@ -50,8 +49,6 @@ const McpParamsFields: React.FunctionComponent<ActionParamsProps<McpActionParams
     [editAction, index, subActionParams]
   );
 
-  // For MCP connector, we only support callTool in params form
-  // initialize and listTools are used internally
   useEffect(() => {
     if (subAction !== 'callTool') {
       editAction('subAction', 'callTool', index);
@@ -100,7 +97,6 @@ const McpParamsFields: React.FunctionComponent<ActionParamsProps<McpActionParams
             const parsed = JSON.parse(json);
             editSubActionParams({ arguments: parsed });
           } catch {
-            // Invalid JSON, will be caught by validation
             editSubActionParams({
               arguments: json as unknown as Record<string, unknown>,
             });

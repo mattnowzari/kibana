@@ -46,7 +46,7 @@ export function getUpdatePayloadFromData<T extends ToolFormData>(data: T): Updat
 
 export function getEditableToolTypes(): Array<{ value: ToolType; text: string }> {
   return Object.entries(TOOLS_FORM_REGISTRY)
-    .filter(([toolType]) => toolType !== ToolType.builtin)
+    .filter(([toolType]) => toolType !== ToolType.builtin && toolType !== ToolType.mcp)
     .map(([toolType, config]) => ({
       value: toolType as ToolType,
       text: config.label,
