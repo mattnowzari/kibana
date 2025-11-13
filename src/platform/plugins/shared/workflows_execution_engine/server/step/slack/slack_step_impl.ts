@@ -7,13 +7,15 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
-import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
-import type { SlackSearchNode } from '@kbn/workflows/graph/types/nodes/base';
-import type { StepExecutionRuntime } from '../../workflow_context_manager/step_execution_runtime';
-import type { WorkflowExecutionRuntimeManager } from '../../workflow_context_manager/workflow_execution_runtime_manager';
-import type { IWorkflowEventLogger } from '../../workflow_event_logger/workflow_event_logger';
-import type { BaseStep, RunStepResult } from '../node_implementation';
-import { BaseAtomicNodeImplementation } from '../node_implementation';
+import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
+import type { SlackSearchNode } from "@kbn/workflows/graph/types/nodes/base";
+import type { StepExecutionRuntime } from "../../workflow_context_manager/step_execution_runtime";
+import type {
+  WorkflowExecutionRuntimeManager
+} from "../../workflow_context_manager/workflow_execution_runtime_manager";
+import type { IWorkflowEventLogger } from "../../workflow_event_logger/workflow_event_logger";
+import type { BaseStep, RunStepResult } from "../node_implementation";
+import { BaseAtomicNodeImplementation } from "../node_implementation";
 
 // Extend BaseStep for HTTP-specific properties
 export interface SlackSearchStep extends BaseStep {
@@ -84,8 +86,10 @@ export class SlackSearchStepImpl extends BaseAtomicNodeImplementation<SlackSearc
 
   protected async _run(input: any): Promise<RunStepResult> {
     try {
+      // Resolve secrets in input (e.g., ${workplace_connector:id:api_key})
+      const { bearerToken, query, fields } =
+        await this.stepExecutionRuntime.contextManager.resolveSecretsInValue(input);
       const pageSize = 100;
-      const { bearerToken, query, fields } = input;
       const allMessages: Array<SlackMessageMatch> = [];
       let page = 1;
       while (true) {
