@@ -66,5 +66,19 @@ export const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
       oauthBaseUrl: 'https://localhost:8052',
     },
   },
+  slack: {
+    name: 'Slack',
+    description: 'Connect to Slack to search messages, channels, and files.',
+    icon: '/plugins/dataConnectors/assets/slack_logo.png',
+    defaultFeatures: ['search_messages', 'search_channels'],
+    flyoutComponentId: 'connector_flyout',
+    saveConfig: {
+      secretsMapping: {
+        apiKey: 'api_key',
+      },
+      config: {},
+      featuresField: 'features',
+    },
+  },
 };
 

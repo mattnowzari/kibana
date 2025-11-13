@@ -70,8 +70,8 @@ export const GoogleDriveConnectorFlyout: React.FC<GoogleDriveConnectorFlyoutProp
 
               await httpClient.get('/api/workplace_connectors/oauth/complete', {
                 query: {
-                  request_id: requestId,
-                  connector_id: connectorId,
+                  requestId: requestId,
+                  connectorId: connectorId,
                 },
             });
               console.log('OAuth completed successfully');

@@ -324,10 +324,17 @@ export function registerConnectorRoutes(
           connectorId: schema.string(),
         }),
       },
+      options: {
+        access: 'public',
+      },
       security: {
         authz: {
           enabled: false,
           reason: 'This route is opted out from authorization',
+        },
+        authc: {
+          enabled: false,
+          reason: 'OAuth callback must be accessible without authentication',
         },
       },
     },
