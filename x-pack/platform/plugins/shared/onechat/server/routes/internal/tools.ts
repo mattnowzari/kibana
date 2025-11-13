@@ -29,6 +29,43 @@ export function registerInternalToolsRoutes({
 }: RouteDependencies) {
   const wrapHandler = getHandlerWrapper({ logger });
 
+  // MCP tools discovery (internal)
+  router.post(
+    {
+      path: `${internalApiPath}/mcp/_discover`,
+      validate: {
+        body: schema.object({
+          url: schema.string({ minLength: 1 }),
+        }),
+      },
+      options: { access: 'internal' },
+      security: {
+        authz: { requiredPrivileges: [apiPrivileges.readOnechat] },
+      },
+    },
+    wrapHandler(async (ctx, request, response) => {
+      const { url } = request.body as { url: string };
+      try {
+        const { McpSdkClient } = await import('../../connector_types/mcp/mcp_sdk_client');
+        const client = new McpSdkClient(url, logger.get('mcp_discover'));
+        await client.initialize();
+        const tools = await client.listTools();
+        return response.ok({
+          body: {
+            tools,
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return response.badRequest({
+          body: {
+            error: `Failed to discover MCP tools: ${message}`,
+          },
+        });
+      }
+    })
+  );
+
   // bulk delete tools
   router.post(
     {

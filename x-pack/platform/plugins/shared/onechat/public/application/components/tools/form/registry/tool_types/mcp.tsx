@@ -55,4 +55,3 @@ export const mcpToolRegistryEntry: ToolTypeRegistryEntry<McpToolFormData> = {
     return zodResolver(createMcpToolFormValidationSchema(services.toolsService));
   },
 };
-

@@ -122,6 +122,7 @@ export class ServiceManager {
       conversations,
       runnerFactory,
       chat,
+      actions,
     };
 
     return this.internalStart;

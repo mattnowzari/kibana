@@ -9,11 +9,11 @@ import { schema } from '@kbn/config-schema';
 
 export const configurationSchema = schema.object({
   connector_id: schema.string(),
-  selected_capabilities: schema.arrayOf(schema.string()),
+  tool_name: schema.string(),
 });
 
 export const configurationUpdateSchema = schema.object({
   connector_id: schema.maybe(schema.string()),
-  selected_capabilities: schema.maybe(schema.arrayOf(schema.string())),
+  tool_name: schema.maybe(schema.string()),
 });
 

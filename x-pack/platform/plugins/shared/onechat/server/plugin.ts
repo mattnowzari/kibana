@@ -20,6 +20,7 @@ import { registerRoutes } from './routes';
 import { registerUISettings } from './ui_settings';
 import type { OnechatHandlerContext } from './request_handler_context';
 import { registerOnechatHandlerContext } from './request_handler_context';
+import { getConnectorType as getMcpConnectorType } from './connector_types/mcp';
 
 export class OnechatPlugin
   implements
@@ -44,6 +45,23 @@ export class OnechatPlugin
     coreSetup: CoreSetup<OnechatStartDependencies, OnechatPluginStart>,
     setupDeps: OnechatSetupDependencies
   ): OnechatPluginSetup {
+    // Register MCP connector as a SubAction connector under Onechat to allow direct postSave tooling
+    try {
+      setupDeps.actions.registerSubActionConnectorType(
+        getMcpConnectorType({
+          getInternalServices: () => {
+            const services = this.serviceManager.internalStart;
+            if (!services) {
+              throw new Error('getInternalServices called before service init');
+            }
+            return services;
+          },
+        })
+      );
+      this.logger.debug('Registered MCP sub-action connector type in onechat');
+    } catch (e) {
+      this.logger.warn(`Failed to register MCP connector type: ${e?.message}`);
+    }
     const serviceSetups = this.serviceManager.setupServices({
       logger: this.logger.get('services'),
       workflowsManagement: setupDeps.workflowsManagement,

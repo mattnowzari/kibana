@@ -31,7 +31,8 @@
       "triggersActionsUi"
     ],
     "requiredBundles": [
-      "kibanaReact"
+      "kibanaReact",
+      "esUiShared"
     ],
     "optionalPlugins": [
       "cloud",

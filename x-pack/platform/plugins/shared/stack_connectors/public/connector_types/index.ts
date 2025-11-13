@@ -38,7 +38,6 @@ import { getTheHiveConnectorType } from './thehive';
 import { getCrowdStrikeConnectorType } from './crowdstrike';
 import { getXSOARConnectorType } from './xsoar';
 import { getJiraServiceManagementConnectorType } from './jira-service-management';
-import { getConnectorType as getMcpConnectorType } from './mcp';
 
 export interface RegistrationServices {
   validateEmailAddresses: (
@@ -77,7 +76,6 @@ export function registerConnectorTypes({
   connectorTypeRegistry.register(getTeamsConnectorType());
   connectorTypeRegistry.register(getTorqConnectorType());
   connectorTypeRegistry.register(getTinesConnectorType());
-  connectorTypeRegistry.register(getMcpConnectorType());
   connectorTypeRegistry.register(getD3SecurityConnectorType());
   connectorTypeRegistry.register(getTheHiveConnectorType());
   connectorTypeRegistry.register(getXSOARConnectorType());

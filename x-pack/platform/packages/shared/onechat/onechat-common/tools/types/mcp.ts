@@ -11,7 +11,7 @@ import { ToolType, type ToolDefinition, type ToolDefinitionWithSchema } from '..
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type McpToolConfig = {
   connector_id: string;
-  selected_capabilities: string[];
+  tool_name: string;
 };
 
 export type McpToolDefinition = ToolDefinition<ToolType.mcp, McpToolConfig>;

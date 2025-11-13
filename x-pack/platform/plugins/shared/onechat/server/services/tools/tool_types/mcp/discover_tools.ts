@@ -6,7 +6,7 @@
  */
 
 import type { ActionsClient } from '@kbn/actions-plugin/server';
-import type { McpToolDefinition } from '../../../../../../stack_connectors/server/connector_types/mcp/mcp_client';
+import type { McpToolDefinition } from '../../../../connector_types/mcp/mcp_sdk_client';
 
 export interface DiscoveredMcpTool {
   name: string;
@@ -26,7 +26,8 @@ export async function discoverMcpTools(
     const result = await actionsClient.execute({
       actionId: connectorId,
       params: {
-        method: 'tools/list',
+        subAction: 'listTools',
+        subActionParams: {},
       },
     });
 

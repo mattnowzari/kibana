@@ -34,6 +34,7 @@ export interface InternalStartServices {
   conversations: ConversationService;
   chat: ChatService;
   runnerFactory: RunnerFactory;
+  actions?: ActionsPluginStart;
 }
 
 export interface ServiceSetupDeps {

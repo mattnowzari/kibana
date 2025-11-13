@@ -5,7 +5,13 @@
  * 2.0.
  */
 
-import type { PluginInitializerContext, Plugin, CoreSetup, Logger } from '@kbn/core/server';
+import type {
+  PluginInitializerContext,
+  Plugin,
+  CoreSetup,
+  CoreStart,
+  Logger,
+} from '@kbn/core/server';
 import type { UsageCollectionSetup } from '@kbn/usage-collection-plugin/server';
 import type { PluginSetupContract as ActionsPluginSetupContract } from '@kbn/actions-plugin/server';
 import type { PluginStartContract as ActionsPluginStartContract } from '@kbn/actions-plugin/server';
@@ -32,6 +38,7 @@ export interface ConnectorsPluginsStart {
   encryptedSavedObjects: EncryptedSavedObjectsPluginStart;
   actions: ActionsPluginStartContract;
   spaces: SpacesPluginSetup;
+  onechat?: import('@kbn/onechat-plugin/server').OnechatPluginStart;
 }
 
 export class StackConnectorsPlugin
@@ -68,6 +75,6 @@ export class StackConnectorsPlugin
     }
   }
 
-  public start() {}
+  public start(core: CoreStart) {}
   public stop() {}
 }

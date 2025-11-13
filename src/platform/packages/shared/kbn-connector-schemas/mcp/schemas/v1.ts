@@ -11,14 +11,16 @@ import { z } from '@kbn/zod';
 export const ConfigSchema = z
   .object({
     url: z.string().url(),
+    selected_tools: z.array(z.string()).min(1),
+    /**
+     * IDs of Agent Builder tools created from this connector.
+     * Maintained server-side; read-only from the UI perspective.
+     */
+    created_tool_ids: z.array(z.string()).optional(),
   })
   .strict();
 
-export const SecretsSchema = z
-  .object({
-    apiKey: z.string().optional(),
-  })
-  .strict();
+export const SecretsSchema = z.object({}).strict();
 
 export const ParamsSchema = z
   .object({

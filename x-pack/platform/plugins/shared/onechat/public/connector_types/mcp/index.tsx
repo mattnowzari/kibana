@@ -12,13 +12,16 @@ import type {
   GenericValidationResult,
 } from '@kbn/triggers-actions-ui-plugin/public/types';
 import { CONNECTOR_ID } from '@kbn/connector-schemas/mcp/constants';
-import type { ActionParamsType, ConnectorTypeConfigType, ConnectorTypeSecretsType } from '@kbn/connector-schemas/mcp';
 
-export function getConnectorType(): ConnectorTypeModel<
-  ConnectorTypeConfigType,
-  ConnectorTypeSecretsType,
-  ActionParamsType
-> {
+interface McpActionParams {
+  subAction: string;
+  subActionParams: {
+    name?: string;
+    arguments?: Record<string, unknown>;
+  };
+}
+
+export function getConnectorType(): ConnectorTypeModel<unknown, unknown, McpActionParams> {
   return {
     id: CONNECTOR_ID,
     iconClass: 'logoWebhook',
@@ -29,17 +32,25 @@ export function getConnectorType(): ConnectorTypeModel<
       defaultMessage: 'MCP',
     }),
     validateParams: async (
-      actionParams: ActionParamsType
-    ): Promise<GenericValidationResult<ActionParamsType>> => {
-      const translations = await import('./translations');
-      const errors: { method: string[]; params: string[] } = {
-        method: [],
-        params: [],
+      actionParams: McpActionParams
+    ): Promise<GenericValidationResult<McpActionParams>> => {
+      const errors: {
+        subAction: string[];
+        subActionParams: { name?: string[]; arguments?: string[] };
+      } = {
+        subAction: [],
+        subActionParams: {},
       };
       const validationResult = { errors };
 
-      if (!actionParams.method) {
-        errors.method.push(translations.METHOD_REQUIRED);
+      if (!actionParams.subAction) {
+        errors.subAction.push('Sub action is required');
+      }
+
+      if (actionParams.subAction === 'callTool') {
+        if (!actionParams.subActionParams?.name) {
+          errors.subActionParams.name = ['Tool name is required'];
+        }
       }
 
       return validationResult;
@@ -47,14 +58,11 @@ export function getConnectorType(): ConnectorTypeModel<
     actionConnectorFields: lazy(() => import('./mcp_connectors')),
     actionParamsFields: lazy(() => import('./mcp_params')),
     defaultActionParams: {
-      method: 'tools/call',
-      params: {
-        name: 'list_indices',
-        arguments: {
-          index_pattern: '*',
-        },
+      subAction: 'callTool',
+      subActionParams: {
+        name: '',
+        arguments: {},
       },
     },
   };
 }
-

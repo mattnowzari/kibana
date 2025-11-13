@@ -5,6 +5,7 @@
  * 2.0.
  */
 
+import { ToolType } from '@kbn/onechat-common';
 import type { ToolTypeDefinition } from '../tool_types';
 import type { InternalToolDefinition } from '../tool_provider';
 import type { ToolPersistedDefinition } from './client';
@@ -26,13 +27,16 @@ export const convertPersistedDefinition = ({
     return definition.getDynamicProps(configuration, { request, spaceId });
   };
 
+  // MCP tools are always read-only as they are created automatically from connectors
+  const isReadOnly = type === ToolType.mcp;
+
   return {
     id,
     type,
     description,
     tags,
     configuration,
-    readonly: false,
+    readonly: isReadOnly,
     getSchema: async () => {
       const props = await getDynamicProps();
       return props.getSchema();

@@ -20,8 +20,8 @@ export async function executeMcpTool(
     const result = await actionsClient.execute({
       actionId: connectorId,
       params: {
-        method: 'tools/call',
-        params: {
+        subAction: 'callTool',
+        subActionParams: {
           name: toolName,
           arguments: toolParams,
         },
