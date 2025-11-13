@@ -48,6 +48,8 @@ export function getWorkflowName(connectorType: string, feature?: string): string
       if (feature === 'download_file') return 'Google Drive - Download File';
       if (feature === 'search_documents') return 'Google Drive - Search Documents';
       return 'Google Drive';
+    case 'notion_search':
+      return 'Notion Search';
     default:
       return `${connectorType} Workflow`;
   }
@@ -68,6 +70,8 @@ export function getWorkflowDescription(connectorType: string, feature?: string):
       if (feature === 'search_documents')
         return 'Search specifically for Google Docs in Google Drive';
       return 'Federated search and access to Google Drive with automatic OAuth token management';
+    case 'notion_search':
+      return 'Search using Notion API with OAuth 2.0';
     default:
       return `Workflow for ${connectorType}`;
   }

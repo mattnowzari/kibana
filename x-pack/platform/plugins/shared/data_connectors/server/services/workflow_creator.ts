@@ -15,6 +15,7 @@ import {
   createGoogleDriveWorkflowTemplate,
   // createGoogleDriveDownloadWorkflowTemplate,
 } from '../workflows/google_drive_template';
+import { createNotionSearchWorkflowTemplate } from '@kbn/data-connectors-plugin/server/workflows/notion_template';
 
 export interface WorkflowCreatorService {
   createWorkflowForConnector(
@@ -68,7 +69,9 @@ export class WorkflowCreator implements WorkflowCreatorService {
         break;
       case 'google_drive':
         workflowYaml = createGoogleDriveWorkflowTemplate(connectorId, feature);
-        
+        break;
+      case 'notion':
+        workflowYaml = createNotionSearchWorkflowTemplate(connectorId, feature);
         break;
       default:
         throw new Error(`Unsupported connector type: ${connectorType}`);
