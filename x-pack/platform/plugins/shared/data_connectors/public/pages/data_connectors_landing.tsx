@@ -34,6 +34,7 @@ import { BraveLogo } from '../components/brave_logo';
 import { ConnectorFlyout } from '../components/connector_flyout';
 import { GoogleDriveConnectorFlyout } from '../components/google_drive_connector_flyout';
 import { GoogleDriveLogo } from '../components/google_drive_logo';
+import { NotionLogo } from '../components/notion_logo';
 import { useConnectors } from '../hooks/use_connectors';
 
 export const DataConnectorsLandingPage = () => {
@@ -44,8 +45,14 @@ export const DataConnectorsLandingPage = () => {
   const [selectedConnectorType, setSelectedConnectorType] = useState<string | null>(null);
 
   const { euiTheme } = useEuiTheme();
-  const { isLoading, createConnector, deleteConnector, isConnected, connectors, refreshConnectors } =
-    useConnectors(httpClient);
+  const {
+    isLoading,
+    createConnector,
+    deleteConnector,
+    isConnected,
+    connectors,
+    refreshConnectors,
+  } = useConnectors(httpClient);
   const brave = useMemo(
     () => connectors.find((c) => c.type === WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH),
     [connectors]
@@ -54,10 +61,16 @@ export const DataConnectorsLandingPage = () => {
     () => connectors.find((c) => c.type === WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE),
     [connectors]
   );
+  const notion = useMemo(
+    () => connectors.find((c) => c.type === WORKPLACE_CONNECTOR_TYPES.NOTION),
+    [connectors]
+  );
   const braveId = brave?.id;
   const googleDriveId = googleDrive?.id;
+  const notionId = notion?.id;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isGoogleDriveMenuOpen, setIsGoogleDriveMenuOpen] = useState(false);
+  const [isNotionMenuOpen, setIsNotionMenuOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [connectorToDelete, setConnectorToDelete] = useState<string | null>(null);
 
@@ -96,6 +109,18 @@ export const DataConnectorsLandingPage = () => {
     });
   };
 
+  const handleNotionConnector = async (data: { features?: string[] }) => {
+    if (!selectedConnectorType) return;
+
+    await createConnector({
+      name: 'Notion',
+      type: selectedConnectorType,
+      secrets: {},
+      config: {},
+      features: data.features && data.features.length ? data.features : ['search_files'],
+    });
+  };
+
   const handleCloseFlyout = () => {
     setIsFlyoutOpen(false);
     setSelectedConnectorType(null);
@@ -103,9 +128,11 @@ export const DataConnectorsLandingPage = () => {
 
   const braveConnected = isConnected(WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH);
   const googleDriveConnected = isConnected(WORKPLACE_CONNECTOR_TYPES.GOOGLE_DRIVE);
+  const notionConnected = isConnected(WORKPLACE_CONNECTOR_TYPES.NOTION);
 
   const closeMenu = () => setIsMenuOpen(false);
   const closeGoogleDriveMenu = () => setIsGoogleDriveMenuOpen(false);
+  const closeNotionMenu = () => setIsNotionMenuOpen(false);
 
   const onConfigure = () => {
     setSelectedConnectorType(WORKPLACE_CONNECTOR_TYPES.BRAVE_SEARCH);
@@ -127,6 +154,17 @@ export const DataConnectorsLandingPage = () => {
     setConnectorToDelete(googleDriveId || null);
     setShowDeleteModal(true);
     closeGoogleDriveMenu();
+  };
+
+  const onConfigureNotion = () => {
+    setSelectedConnectorType(WORKPLACE_CONNECTOR_TYPES.NOTION);
+    setIsFlyoutOpen(true);
+    closeNotionMenu();
+  };
+  const onDeleteNotion = () => {
+    setConnectorToDelete(notionId || null);
+    setShowDeleteModal(true);
+    closeNotionMenu();
   };
 
   const modalTitleId = useGeneratedHtmlId();
@@ -313,6 +351,82 @@ export const DataConnectorsLandingPage = () => {
               />
             </div>
           </EuiFlexItem>
+
+          <EuiFlexItem>
+            <div style={{ position: 'relative' }}>
+              <EuiCard
+                icon={<NotionLogo />}
+                title="Notion"
+                description="Connect to Notion to search and access files using OAuth."
+                footer={
+                  <EuiFlexGroup justifyContent="center" gutterSize="xs" responsive={false}>
+                    {notionConnected ? (
+                      <EuiFlexItem grow={false}>
+                        <EuiPopover
+                          button={
+                            <EuiButton
+                              size="s"
+                              iconType="arrowDown"
+                              iconSide="right"
+                              onClick={() => setIsNotionMenuOpen((v) => !v)}
+                              color="success"
+                              fill
+                              style={{
+                                backgroundColor: '#008A5E',
+                                borderColor: '#008A5E',
+                                color: '#FFFFFF',
+                                opacity: 1,
+                              }}
+                            >
+                              Connected
+                            </EuiButton>
+                          }
+                          isOpen={isNotionMenuOpen}
+                          closePopover={closeNotionMenu}
+                          panelPaddingSize="none"
+                          anchorPosition="downLeft"
+                        >
+                          <EuiContextMenuPanel
+                            items={[
+                              <EuiContextMenuItem
+                                key="configure"
+                                icon="gear"
+                                onClick={onConfigureNotion}
+                              >
+                                Configure
+                              </EuiContextMenuItem>,
+                              <EuiContextMenuItem
+                                key="delete"
+                                icon="trash"
+                                css={css`
+                                  color: ${euiTheme.colors.textDanger};
+                                `}
+                                onClick={onDeleteNotion}
+                              >
+                                <span className="euiTextColor-danger">Delete</span>
+                              </EuiContextMenuItem>,
+                            ]}
+                          />
+                        </EuiPopover>
+                      </EuiFlexItem>
+                    ) : (
+                      <EuiFlexItem grow={false}>
+                        <EuiButton
+                          size="s"
+                          onClick={() => handleSelectConnector(WORKPLACE_CONNECTOR_TYPES.NOTION)}
+                          isLoading={isLoading}
+                          color="primary"
+                          fill
+                        >
+                          Connect
+                        </EuiButton>
+                      </EuiFlexItem>
+                    )}
+                  </EuiFlexGroup>
+                }
+              />
+            </div>
+          </EuiFlexItem>
         </EuiFlexGrid>
       </KibanaPageTemplate.Section>
 
@@ -325,6 +439,18 @@ export const DataConnectorsLandingPage = () => {
             onClose={handleCloseFlyout}
             onSave={handleSaveBraveConnector}
             isEditing={Boolean(braveConnected)}
+          />
+        )}
+
+      {isFlyoutOpen &&
+        selectedConnectorType &&
+        selectedConnectorType === WORKPLACE_CONNECTOR_TYPES.NOTION && (
+          <ConnectorFlyout
+            connectorType={selectedConnectorType}
+            connectorName="Notion"
+            onClose={handleCloseFlyout}
+            onSave={handleNotionConnector}
+            isEditing={Boolean(notionConnected)}
           />
         )}
 

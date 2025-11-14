@@ -66,16 +66,20 @@ export function registerConnectorRoutes(
         ];
 
         const oauthUrl = `https://localhost:8052/oauth/start/google`;
-        const authresponse = await axios.post(oauthUrl, {
-          scope
-        }, {
-          httpsAgent: new https.Agent({
-            rejectUnauthorized: false
-          })
-        });
+        const authresponse = await axios.post(
+          oauthUrl,
+          {
+            scope,
+          },
+          {
+            httpsAgent: new https.Agent({
+              rejectUnauthorized: false,
+            }),
+          }
+        );
 
-        const googleUrl = authresponse.data['auth_url']
-        const requestId = authresponse.data['request_id'];
+        const googleUrl = authresponse.data.auth_url;
+        const requestId = authresponse.data.request_id;
 
         logger.info(`Google URL: ${googleUrl}`);
 
@@ -97,7 +101,7 @@ export function registerConnectorRoutes(
       }
     }
   );
-  
+
   // Handle OAuth callback - fetches secrets and updates connector
   router.get(
     {
@@ -117,7 +121,7 @@ export function registerConnectorRoutes(
     },
     async (context, request, response) => {
       const coreContext = await context.core;
-      
+
       try {
         const { request_id, connector_id } = request.query;
         const savedObjectsClient = coreContext.savedObjects.client;
@@ -141,7 +145,7 @@ export function registerConnectorRoutes(
             });
 
             access_token = secretsresponse.data['access_token'];
-            
+
             if (access_token) {
               logger.info(`Access token found on attempt ${attempt}`);
               break;
