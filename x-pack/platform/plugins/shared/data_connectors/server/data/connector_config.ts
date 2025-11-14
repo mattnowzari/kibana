@@ -85,7 +85,7 @@ export const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
     description: 'Connect to Notion to search pages and data sources using OAuth.',
     icon: '/plugins/dataConnectors/assets/notion_logo.png',
     defaultFeatures: ['search_files'],
-    flyoutComponentId: 'connector_flyout',
+    customFlyoutComponentId: 'notion_connector_flyout',
     saveConfig: {
       secretsMapping: {
         token: 'token',
