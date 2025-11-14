@@ -87,60 +87,14 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
   }
 // -------------------------------------------------------------
   private async executeHttpRequest(input?: any): Promise<RunStepResult> {
-    const { url, method, headers, body, fetcher: fetcherOptions } = input;
+    // Resolve secrets in input (e.g., ${workplace_connector:id:api_key})
+    const resolvedInput = await this.stepExecutionRuntime.contextManager.resolveSecretsInValue(input);
+    const { url, method, headers, body, fetcher: fetcherOptions } = resolvedInput;
 
-    // Resolve workplace connector secret references if available
-    const dependencies = this.stepExecutionRuntime.contextManager.getDependencies();
-    const coreStart = this.stepExecutionRuntime.contextManager.getCoreStart();
-    const fakeRequest = this.stepExecutionRuntime.contextManager.getFakeRequest();
-
-    let finalUrl: string = url;
-    let finalHeaders: HttpHeaders | undefined = headers;
+    const finalUrl: string = url;
+    const finalHeaders: HttpHeaders | undefined = headers;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let finalBody: any = body;
-
-    if (dependencies?.secretResolver && coreStart && fakeRequest) {
-      const savedObjectsClient = coreStart.savedObjects.getScopedClient(fakeRequest);
-      const context = this.stepExecutionRuntime.contextManager.getContext?.();
-      const namespace =
-        (context as any)?.workflow?.spaceId ||
-        (savedObjectsClient as any).getCurrentNamespace?.() ||
-        ((fakeRequest as any).headers?.['x-elastic-project-id'] as string | undefined);
-
-      // Resolve URL secrets
-      if (typeof finalUrl === 'string') {
-        finalUrl = await dependencies.secretResolver.resolveSecrets(
-          finalUrl,
-          savedObjectsClient,
-          namespace
-        );
-      }
-
-      // Resolve headers secrets
-      if (finalHeaders && typeof finalHeaders === 'object') {
-        const resolvedHeaders = await dependencies.secretResolver.resolveSecretsInObject(
-          finalHeaders as unknown as Record<string, unknown>,
-          savedObjectsClient,
-          namespace
-        );
-        finalHeaders = resolvedHeaders as unknown as HttpHeaders;
-      }
-
-      // Resolve body secrets
-      if (typeof finalBody === 'string') {
-        finalBody = await dependencies.secretResolver.resolveSecrets(
-          finalBody,
-          savedObjectsClient,
-          namespace
-        );
-      } else if (finalBody && typeof finalBody === 'object') {
-        finalBody = await dependencies.secretResolver.resolveSecretsInObject(
-          finalBody as Record<string, unknown>,
-          savedObjectsClient,
-          namespace
-        );
-      }
-    }
+    const finalBody: any = body;
 
     // Validate that the URL is allowed based on the allowedHosts configuration
     try {

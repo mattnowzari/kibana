@@ -15,7 +15,8 @@ import {
   createGoogleDriveWorkflowTemplate,
   // createGoogleDriveDownloadWorkflowTemplate,
 } from '../workflows/google_drive_template';
-import { createNotionSearchWorkflowTemplate } from '@kbn/data-connectors-plugin/server/workflows/notion_template';
+import { createSlackWorkflowTemplate } from '../workflows/slack_template';
+import { createNotionSearchWorkflowTemplate } from '../workflows/notion_template';
 
 export interface WorkflowCreatorService {
   createWorkflowForConnector(
@@ -69,6 +70,9 @@ export class WorkflowCreator implements WorkflowCreatorService {
         break;
       case 'google_drive':
         workflowYaml = createGoogleDriveWorkflowTemplate(connectorId, feature);
+        break;
+      case 'slack':
+        workflowYaml = createSlackWorkflowTemplate(connectorId, feature);
         break;
       case 'notion':
         workflowYaml = createNotionSearchWorkflowTemplate(connectorId, feature);
