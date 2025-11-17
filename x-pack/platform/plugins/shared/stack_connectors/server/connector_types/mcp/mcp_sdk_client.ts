@@ -63,7 +63,7 @@ export class McpSdkClient {
     this.logger = logger;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
+      Accept: 'application/json',
     };
 
     const axiosConfig: AxiosRequestConfig = {
@@ -105,8 +105,50 @@ export class McpSdkClient {
     };
 
     try {
-      const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>('', request);
-      let result = response.data;
+      const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
+        '',
+        request,
+        // Some servers expect the same headers for initialize as follow-on methods
+        {
+          headers: {
+            Accept: 'application/json, text/event-stream',
+            'mcp-protocol-version':
+              (params?.protocolVersion as string) || DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
+          },
+        }
+      );
+      let result: any = response.data;
+      const contentType = (response.headers?.['content-type'] || '').toString().toLowerCase();
+      if (
+        contentType.includes('text/event-stream') ||
+        (typeof result === 'string' && result.includes('data:'))
+      ) {
+        const text = result.toString();
+        let lastDataBlock: string | undefined;
+        let current: string[] = [];
+        for (const line of text.split(/\r?\n/)) {
+          if (line.startsWith('data:')) {
+            current.push(line.slice(5).trimStart());
+          } else if (line.trim() === '') {
+            if (current.length > 0) {
+              lastDataBlock = current.join('\n');
+              current = [];
+            }
+          }
+        }
+        if (current.length > 0) {
+          lastDataBlock = current.join('\n');
+        }
+        if (lastDataBlock) {
+          try {
+            result = JSON.parse(lastDataBlock);
+          } catch (e) {
+            throw new Error('MCP initialization failed: Invalid SSE JSON payload');
+          }
+        } else {
+          throw new Error('MCP initialization failed: Empty SSE payload');
+        }
+      }
 
       // Handle batch responses (array) or single response
       if (Array.isArray(result)) {
@@ -149,40 +191,85 @@ export class McpSdkClient {
       await this.initialize();
     }
 
-    const requestId = this.generateRequestId();
-    const request: JSONRPCMessage = {
-      jsonrpc: '2.0',
-      id: requestId,
-      method: 'tools/list',
-    };
-
     try {
-      const headers: Record<string, string> = {
-        'mcp-protocol-version': this.protocolVersion,
+      const doList = async (params: Record<string, unknown>, acceptHeader: string) => {
+        const requestId = this.generateRequestId();
+        const request: JSONRPCMessage = {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/list',
+          params,
+        };
+        const headers: Record<string, string> = {
+          'mcp-protocol-version': this.protocolVersion,
+          Accept: acceptHeader,
+        };
+        if (this.sessionId) {
+          headers['mcp-session-id'] = this.sessionId;
+        }
+        const config: AxiosRequestConfig = { headers };
+        const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
+          '',
+          request,
+          config
+        );
+        let result: any = response.data;
+        const contentType = (response.headers?.['content-type'] || '').toString().toLowerCase();
+        if (
+          contentType.includes('text/event-stream') ||
+          (typeof result === 'string' && result.includes('data:'))
+        ) {
+          const text = result.toString();
+          let lastDataBlock: string | undefined;
+          let current: string[] = [];
+          for (const line of text.split(/\r?\n/)) {
+            if (line.startsWith('data:')) {
+              current.push(line.slice(5).trimStart());
+            } else if (line.trim() === '') {
+              if (current.length > 0) {
+                lastDataBlock = current.join('\n');
+                current = [];
+              }
+            }
+          }
+          if (current.length > 0) {
+            lastDataBlock = current.join('\n');
+          }
+          if (lastDataBlock) {
+            try {
+              result = JSON.parse(lastDataBlock);
+            } catch (e) {
+              throw new Error('MCP tools/list failed: Invalid SSE JSON payload');
+            }
+          } else {
+            throw new Error('MCP tools/list failed: Empty SSE payload');
+          }
+        }
+        if (Array.isArray(result)) {
+          result = result.find((r) => (r as any).id === requestId) || result[0];
+        }
+        if ('error' in (result as any) && (result as any).error) {
+          const err = (result as any).error as any;
+          const message =
+            err?.message || err?.data?.message || JSON.stringify(err) || 'Unknown error';
+          throw new Error(`MCP tools/list failed: ${message}`);
+        }
+        const toolsResult = 'result' in (result as any) ? (result as any).result : result;
+        const tools =
+          (toolsResult as any)?.tools ||
+          (Array.isArray(toolsResult) ? toolsResult : undefined) ||
+          [];
+        return tools as McpToolDefinition[];
       };
-      if (this.sessionId) {
-        headers['mcp-session-id'] = this.sessionId;
+
+      // Prefer no cursor param. Fallback only changes Accept header, not params shape.
+      try {
+        return await doList({}, 'application/json');
+      } catch (firstErr) {
+        this.logger.debug(`tools/list with {} failed: ${(firstErr as Error).message}`);
+        // As a last resort, attempt SSE accept header for servers expecting it
+        return await doList({}, 'application/json, text/event-stream');
       }
-      const config: AxiosRequestConfig = { headers };
-
-      const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
-        '',
-        request,
-        config
-      );
-      let result = response.data;
-
-      // Handle batch responses (array) or single response
-      if (Array.isArray(result)) {
-        result = result.find((r) => r.id === requestId) || result[0];
-      }
-
-      if ('error' in result && result.error) {
-        throw new Error(`MCP tools/list failed: ${result.error.message || 'Unknown error'}`);
-      }
-
-      const toolsResult = 'result' in result ? (result.result as ListToolsResult) : null;
-      return toolsResult?.tools || [];
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`MCP tools/list error: ${message}`);

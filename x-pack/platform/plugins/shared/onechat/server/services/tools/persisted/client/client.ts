@@ -7,7 +7,7 @@
 
 import type { Logger } from '@kbn/logging';
 import type { ElasticsearchClient } from '@kbn/core-elasticsearch-server';
-import { createToolNotFoundError, createBadRequestError } from '@kbn/onechat-common';
+import { createToolNotFoundError } from '@kbn/onechat-common';
 import { createSpaceDslFilter } from '../../../../utils/spaces';
 import type { ToolCreateParams, ToolTypeUpdateParams } from '../../tool_provider';
 import type { ToolStorage } from './storage';
@@ -75,16 +75,10 @@ class ToolClientImpl {
   async create(createRequest: ToolCreateParams): Promise<ToolPersistedDefinition> {
     const { id } = createRequest;
 
-    const document = await this._get(id);
-    if (document) {
-      throw createBadRequestError(`Tool with id '${id}' already exists.`);
-    }
-
     const attributes = createAttributes({ createRequest, space: this.space });
 
-    await this.storage.getClient().index({
-      document: attributes,
-    });
+    // Use deterministic _id to guarantee uniqueness under concurrent creates.
+    await this.storage.getClient().index({ id, document: attributes });
 
     return this.get(id);
   }

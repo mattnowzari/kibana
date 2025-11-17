@@ -47,6 +47,10 @@ export interface CreateConnectorFlyoutProps {
   onConnectorCreated?: (connector: ActionConnector) => void;
   onTestConnector?: (connector: ActionConnector) => void;
   isServerless?: boolean;
+  /**
+   * If provided, preselects the given action type id in the flyout.
+   */
+  initialActionTypeId?: string;
 }
 
 const CreateConnectorFlyoutComponent: React.FC<CreateConnectorFlyoutProps> = ({
@@ -55,6 +59,7 @@ const CreateConnectorFlyoutComponent: React.FC<CreateConnectorFlyoutProps> = ({
   onClose,
   onConnectorCreated,
   onTestConnector,
+  initialActionTypeId,
 }) => {
   const {
     application: { capabilities },
@@ -221,6 +226,24 @@ const CreateConnectorFlyoutComponent: React.FC<CreateConnectorFlyoutProps> = ({
     };
   }, []);
 
+  // Preselect initialActionTypeId when available and action types loaded
+  useEffect(() => {
+    if (initialActionTypeId && allActionTypes && allActionTypes[initialActionTypeId]) {
+      setActionType(allActionTypes[initialActionTypeId]);
+      if (resetConnectorForm.current) {
+        resetConnectorForm.current({
+          resetValues: true,
+          defaultValue: {
+            actionTypeId: initialActionTypeId,
+            isDeprecated: false,
+            config: {},
+            secrets: {},
+          },
+        });
+      }
+    }
+  }, [initialActionTypeId, allActionTypes, setActionType, resetConnectorForm]);
+
   return (
     <EuiFlyout
       onClose={onClose}
@@ -354,7 +377,7 @@ const CreateConnectorFlyoutComponent: React.FC<CreateConnectorFlyoutProps> = ({
       </EuiFlyoutBody>
       <FlyoutFooter
         hasConnectorTypeSelected={hasConnectorTypeSelected}
-        onBack={resetActionType}
+        onBack={initialActionTypeId ? onClose : resetActionType}
         onCancel={onClose}
       />
     </EuiFlyout>

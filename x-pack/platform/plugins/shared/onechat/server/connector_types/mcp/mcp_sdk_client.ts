@@ -55,7 +55,7 @@ export class McpSdkClient {
     this.logger = logger;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
+      Accept: 'application/json',
     };
 
     const axiosConfig: AxiosRequestConfig = {
@@ -87,7 +87,7 @@ export class McpSdkClient {
       method: 'initialize',
       params: {
         protocolVersion: params?.protocolVersion || DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
-        capabilities: params?.capabilities || {},
+        capabilities: params?.capabilities || { tools: {} },
         clientInfo: params?.clientInfo || {
           name: 'kibana-mcp-connector',
           version: '1.0.0',
@@ -95,71 +95,180 @@ export class McpSdkClient {
       },
     };
 
-    const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>('', request);
-    let result = response.data;
-    if (Array.isArray(result)) {
-      result = result.find((r) => r.id === requestId) || result[0];
-    }
-    if ('error' in result && result.error) {
-      throw new Error(`MCP initialization failed: ${result.error.message || 'Unknown error'}`);
-    }
-
-    if ('result' in result && result.result?.protocolVersion) {
-      const serverVersion = result.result.protocolVersion as string;
-      if (SUPPORTED_PROTOCOL_VERSIONS.includes(serverVersion)) {
-        this.protocolVersion = serverVersion;
-      } else {
-        this.logger.warn(
-          `Unsupported MCP protocol version: ${serverVersion}. Using default: ${DEFAULT_NEGOTIATED_PROTOCOL_VERSION}`
-        );
+    try {
+      const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
+        '',
+        request,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json, text/event-stream',
+            'mcp-protocol-version':
+              (params?.protocolVersion as string) || DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
+          },
+        }
+      );
+      let result: any = response.data;
+      const contentType = (response.headers?.['content-type'] || '').toString().toLowerCase();
+      if (
+        contentType.includes('text/event-stream') ||
+        (typeof result === 'string' && result.includes('data:'))
+      ) {
+        const text = result.toString();
+        let lastDataBlock: string | undefined;
+        let current: string[] = [];
+        for (const line of text.split(/\r?\n/)) {
+          if (line.startsWith('data:')) {
+            current.push(line.slice(5).trimStart());
+          } else if (line.trim() === '') {
+            if (current.length > 0) {
+              lastDataBlock = current.join('\n');
+              current = [];
+            }
+          }
+        }
+        if (current.length > 0) {
+          lastDataBlock = current.join('\n');
+        }
+        if (lastDataBlock) {
+          try {
+            result = JSON.parse(lastDataBlock);
+          } catch (e) {
+            throw new Error('MCP initialization failed: Invalid SSE JSON payload');
+          }
+        } else {
+          throw new Error('MCP initialization failed: Empty SSE payload');
+        }
       }
-    }
+      if (Array.isArray(result)) {
+        result = result.find((r) => (r as any).id === requestId) || result[0];
+      }
+      if ('error' in (result as any) && (result as any).error) {
+        const err = (result as any).error as any;
+        const message =
+          err?.message || err?.data?.message || JSON.stringify(err) || 'Unknown error';
+        throw new Error(`MCP initialization failed: ${message}`);
+      }
 
-    const sessionHeader = response.headers?.['mcp-session-id'] as string | string[] | undefined;
-    if (sessionHeader) {
-      this.sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader;
-      this.logger.debug(`MCP session established: ${this.sessionId}`);
-    }
+      if ('result' in (result as any) && (result as any).result?.protocolVersion) {
+        const serverVersion = (result as any).result.protocolVersion as string;
+        if (SUPPORTED_PROTOCOL_VERSIONS.includes(serverVersion)) {
+          this.protocolVersion = serverVersion;
+        } else {
+          this.logger.warn(
+            `Unsupported MCP protocol version: ${serverVersion}. Using default: ${DEFAULT_NEGOTIATED_PROTOCOL_VERSION}`
+          );
+        }
+      }
 
-    this.initialized = true;
-    this.logger.debug('MCP client initialized successfully');
+      const sessionHeader = response.headers?.['mcp-session-id'] as string | string[] | undefined;
+      if (sessionHeader) {
+        this.sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader;
+        this.logger.debug(`MCP session established: ${this.sessionId}`);
+      }
+
+      this.initialized = true;
+      this.logger.debug('MCP client initialized successfully');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`MCP initialization error: ${message}`);
+      throw new Error(`Failed to initialize MCP connection: ${message}`);
+    }
   }
 
   async listTools(): Promise<McpToolDefinition[]> {
+    this.logger.info(`Is MCP initialized: ${this.initialized}`);
     if (!this.initialized) {
       await this.initialize();
     }
 
-    const requestId = this.generateRequestId();
-    const request: JSONRPCMessage = {
-      jsonrpc: '2.0',
-      id: requestId,
-      method: 'tools/list',
-    };
+    try {
+      const doList = async (params: Record<string, unknown>, acceptHeader: string) => {
+        const requestId = this.generateRequestId();
+        const request: JSONRPCMessage = {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/list',
+          params,
+        };
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'mcp-protocol-version': this.protocolVersion,
+          Accept: acceptHeader,
+        };
+        if (this.sessionId) {
+          headers['mcp-session-id'] = this.sessionId;
+        }
+        const config: AxiosRequestConfig = { headers };
 
-    const headers: Record<string, string> = {
-      'mcp-protocol-version': this.protocolVersion,
-    };
-    if (this.sessionId) {
-      headers['mcp-session-id'] = this.sessionId;
-    }
-    const config: AxiosRequestConfig = { headers };
+        const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
+          '',
+          request,
+          config
+        );
+        let result = response.data as any;
+        const contentType = (response.headers?.['content-type'] || '').toString().toLowerCase();
+        if (
+          contentType.includes('text/event-stream') ||
+          (typeof result === 'string' && result.includes('data:'))
+        ) {
+          const text = result.toString();
+          let lastDataBlock: string | undefined;
+          let current: string[] = [];
+          for (const line of text.split(/\r?\n/)) {
+            if (line.startsWith('data:')) {
+              current.push(line.slice(5).trimStart());
+            } else if (line.trim() === '') {
+              if (current.length > 0) {
+                lastDataBlock = current.join('\n');
+                current = [];
+              }
+            }
+          }
+          if (current.length > 0) {
+            lastDataBlock = current.join('\n');
+          }
+          if (lastDataBlock) {
+            try {
+              result = JSON.parse(lastDataBlock);
+            } catch (e) {
+              throw new Error('MCP tools/list failed: Invalid SSE JSON payload');
+            }
+          } else {
+            throw new Error('MCP tools/list failed: Empty SSE payload');
+          }
+        }
+        if (Array.isArray(result)) {
+          result = result.find((r) => (r as any).id === requestId) || result[0];
+        }
+        if ('error' in (result as any) && (result as any).error) {
+          const err = (result as any).error as any;
+          const dataMessage: string | undefined =
+            (err?.data && (err.data.message || err.data.detail || err.data.error)) || undefined;
+          const message =
+            err?.message || dataMessage || (err ? JSON.stringify(err) : '') || 'Unknown error';
+          throw new Error(`MCP tools/list failed: ${message}`);
+        }
+        const toolsResult = 'result' in (result as any) ? (result as any).result : (result as any);
+        const tools =
+          (toolsResult as ListToolsResult)?.tools ||
+          (Array.isArray(toolsResult) ? toolsResult : undefined) ||
+          [];
+        return tools as McpToolDefinition[];
+      };
 
-    const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
-      '',
-      request,
-      config
-    );
-    let result = response.data;
-    if (Array.isArray(result)) {
-      result = result.find((r) => r.id === requestId) || result[0];
+      // Prefer no cursor param. Fallback only changes Accept header, not params shape.
+      try {
+        return await doList({}, 'application/json');
+      } catch (firstErr) {
+        this.logger.debug(`tools/list with {} failed: ${(firstErr as Error).message}`);
+        return await doList({}, 'application/json, text/event-stream');
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`MCP tools/list error: ${message}`);
+      throw new Error(`Failed to list MCP tools: ${message}`);
     }
-    if ('error' in result && result.error) {
-      throw new Error(`MCP tools/list failed: ${result.error.message || 'Unknown error'}`);
-    }
-
-    const toolsResult = 'result' in result ? (result.result as ListToolsResult) : null;
-    return toolsResult?.tools || [];
   }
 
   async callTool(params: McpCallToolParams): Promise<CallToolResult> {
@@ -178,28 +287,38 @@ export class McpSdkClient {
       },
     };
 
-    const headers: Record<string, string> = {
-      'mcp-protocol-version': this.protocolVersion,
-    };
-    if (this.sessionId) {
-      headers['mcp-session-id'] = this.sessionId;
-    }
-    const config: AxiosRequestConfig = { headers };
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'mcp-protocol-version': this.protocolVersion,
+      };
+      if (this.sessionId) {
+        headers['mcp-session-id'] = this.sessionId;
+      }
+      const config: AxiosRequestConfig = { headers };
 
-    const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
-      '',
-      request,
-      config
-    );
-    let result = response.data;
-    if (Array.isArray(result)) {
-      result = result.find((r) => r.id === requestId) || result[0];
-    }
-    if ('error' in result && result.error) {
-      throw new Error(`MCP tools/call failed: ${result.error.message || 'Unknown error'}`);
-    }
+      const response = await this.axiosInstance.post<JSONRPCMessage | JSONRPCMessage[]>(
+        '',
+        request,
+        config
+      );
+      let result = response.data as any;
+      if (Array.isArray(result)) {
+        result = result.find((r) => (r as any).id === requestId) || result[0];
+      }
+      if ('error' in (result as any) && (result as any).error) {
+        const err = (result as any).error as any;
+        const message =
+          err?.message || err?.data?.message || JSON.stringify(err) || 'Unknown error';
+        throw new Error(`MCP tools/call failed: ${message}`);
+      }
 
-    return ('result' in result ? result.result : null) as CallToolResult;
+      return ('result' in (result as any) ? (result as any).result : null) as CallToolResult;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`MCP tools/call error: ${message}`);
+      throw new Error(`Failed to call MCP tool: ${message}`);
+    }
   }
 
   private generateRequestId(): RequestId {

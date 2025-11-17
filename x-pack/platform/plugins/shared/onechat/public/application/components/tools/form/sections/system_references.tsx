@@ -26,7 +26,7 @@ import { ToolFormSection } from '../components/tool_form_section';
 import { i18nMessages } from '../i18n';
 import { ToolFormMode } from '../tool_form';
 import type { ToolFormData } from '../types/tool_form_types';
-import { getEditableToolTypes } from '../registry/tools_form_registry';
+import { getEditableToolTypes, getToolTypeConfig } from '../registry/tools_form_registry';
 
 export interface SystemReferencesProps {
   mode: ToolFormMode;
@@ -66,6 +66,14 @@ export const SystemReferences = ({ mode, toolType, setToolType }: SystemReferenc
     }
     return editableTypes;
   }, [serverToolTypes, toolTypesLoading]);
+
+  const typeLabel = useMemo(() => {
+    try {
+      return type ? getToolTypeConfig(type).label : '';
+    } catch {
+      return String(type ?? '');
+    }
+  }, [type]);
 
   return (
     <ToolFormSection
@@ -109,19 +117,23 @@ export const SystemReferences = ({ mode, toolType, setToolType }: SystemReferenc
       }
     >
       <EuiFormRow label={i18nMessages.configuration.form.type.label} error={errors.type?.message}>
-        <Controller
-          control={control}
-          name="type"
-          render={({ field: { ref, ...field } }) => (
-            <EuiSelect
-              data-test-subj="agentBuilderToolTypeSelect"
-              options={editableToolTypes}
-              {...field}
-              inputRef={ref}
-              disabled={isToolIdDisabled}
-            />
-          )}
-        />
+        {isReadOnly ? (
+          <EuiFieldText data-test-subj="agentBuilderToolTypeReadonly" value={typeLabel} disabled />
+        ) : (
+          <Controller
+            control={control}
+            name="type"
+            render={({ field: { ref, ...field } }) => (
+              <EuiSelect
+                data-test-subj="agentBuilderToolTypeSelect"
+                options={editableToolTypes}
+                {...field}
+                inputRef={ref}
+                disabled={isToolIdDisabled}
+              />
+            )}
+          />
+        )}
       </EuiFormRow>
       <EuiFormRow
         data-test-subj="agentBuilderToolIdRow"

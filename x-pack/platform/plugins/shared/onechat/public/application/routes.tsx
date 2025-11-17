@@ -14,6 +14,7 @@ import { OnechatConversationsPage } from './pages/conversations';
 import { OnechatToolCreatePage } from './pages/tool_create';
 import { OnechatToolDetailsPage } from './pages/tool_details';
 import { OnechatToolsPage } from './pages/tools';
+import { OnechatMcpServersPage } from './pages/mcp_servers';
 
 export const OnechatRoutes: React.FC<{}> = () => {
   return (
@@ -40,6 +41,10 @@ export const OnechatRoutes: React.FC<{}> = () => {
 
       <Route path="/tools/:toolId">
         <OnechatToolDetailsPage />
+      </Route>
+
+      <Route path="/mcp_servers">
+        <OnechatMcpServersPage />
       </Route>
 
       <Route path="/tools">

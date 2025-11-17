@@ -18,13 +18,32 @@ import { i18n } from '@kbn/i18n';
 import { docLinks } from '../../../../../common/doc_links';
 import { useKibanaUrl } from '../../../hooks/use_kibana_url';
 import { MCP_SERVER_PATH } from '../../../../../common/mcp';
+import { useNavigation } from '../../../hooks/use_navigation';
+import { appPaths } from '../../../utils/app_paths';
 
-export const McpConnectionButton = () => {
+interface McpConnectionButtonProps {
+  onManageServersClick?: () => void;
+}
+
+export const McpConnectionButton: React.FC<McpConnectionButtonProps> = ({
+  onManageServersClick,
+}) => {
   const [isContextOpen, setIsContextOpen] = useState(false);
 
   const { kibanaUrl } = useKibanaUrl();
+  const { navigateToOnechatUrl, createOnechatUrl } = useNavigation();
 
   const mcpServerUrl = `${kibanaUrl}${MCP_SERVER_PATH}`;
+  const manageServersHref = createOnechatUrl(appPaths.mcpServers);
+
+  const handleManageServersClick = () => {
+    setIsContextOpen(false);
+    if (onManageServersClick) {
+      onManageServersClick();
+    } else {
+      navigateToOnechatUrl(appPaths.mcpServers);
+    }
+  };
 
   return (
     <EuiPopover
@@ -35,8 +54,8 @@ export const McpConnectionButton = () => {
           onClick={() => setIsContextOpen(true)}
         >
           <EuiText size="s">
-            {i18n.translate('xpack.onechat.tools.mcpServerConnectionButton', {
-              defaultMessage: 'MCP Server',
+            {i18n.translate('xpack.onechat.tools.mcpSettingsButton', {
+              defaultMessage: 'MCP Settings',
             })}
           </EuiText>
         </EuiButtonEmpty>
@@ -48,6 +67,17 @@ export const McpConnectionButton = () => {
     >
       <EuiContextMenuPanel
         items={[
+          <EuiContextMenuItem
+            key="manage-servers"
+            icon="plugs"
+            onClick={handleManageServersClick}
+            href={manageServersHref}
+          >
+            {i18n.translate('xpack.onechat.tools.manageExternalMcpServersButton', {
+              defaultMessage: 'Manage MCP Servers',
+            })}
+          </EuiContextMenuItem>,
+
           <EuiCopy
             key="copy"
             textToCopy={mcpServerUrl}

@@ -29,11 +29,19 @@ export const GenerativeAIForSecurityConnectorFeatureId = 'generativeAIForSecurit
 export const GenerativeAIForObservabilityConnectorFeatureId = 'generativeAIForObservability';
 export const GenerativeAIForSearchPlaygroundConnectorFeatureId = 'generativeAIForSearchPlayground';
 export const EndpointSecurityConnectorFeatureId = 'endpointSecurity';
+export const AgentBuilderConnectorFeatureId = 'agentBuilder';
 
 const compatibilityEndpointSecurity = i18n.translate(
   'xpack.actions.availableConnectorFeatures.compatibility.endpointSecurity',
   {
     defaultMessage: 'Endpoint Security',
+  }
+);
+
+const compatibilityAgentBuilder = i18n.translate(
+  'xpack.actions.availableConnectorFeatures.compatibility.agentBuilder',
+  {
+    defaultMessage: 'Agent Builder',
   }
 );
 
@@ -134,6 +142,12 @@ export const EndpointSecurityConnectorFeature: ConnectorFeatureConfig = {
   compatibility: compatibilityEndpointSecurity,
 };
 
+export const AgentBuilderConnectorFeature: ConnectorFeatureConfig = {
+  id: AgentBuilderConnectorFeatureId,
+  name: compatibilityAgentBuilder,
+  compatibility: compatibilityAgentBuilder,
+};
+
 const AllAvailableConnectorFeatures = {
   [AlertingConnectorFeature.id]: AlertingConnectorFeature,
   [CasesConnectorFeature.id]: CasesConnectorFeature,
@@ -143,6 +157,7 @@ const AllAvailableConnectorFeatures = {
   [GenerativeAIForObservabilityFeature.id]: GenerativeAIForObservabilityFeature,
   [GenerativeAIForSearchPlaygroundFeature.id]: GenerativeAIForSearchPlaygroundFeature,
   [EndpointSecurityConnectorFeature.id]: EndpointSecurityConnectorFeature,
+  [AgentBuilderConnectorFeature.id]: AgentBuilderConnectorFeature,
 };
 
 export function areValidFeatures(ids: string[]) {
