@@ -99,8 +99,7 @@ export class GDriveStepImpl extends BaseAtomicNodeImplementation<GDriveStep> {
   }
 
   public getInput() {
-    const { operation, fileId, folderId, subject, service_credential, accessToken, query, doc_limit } =
-      this.step.with;
+    const { service_credential, accessToken, operation, fileId, folderId, subject, query, doc_limit } = this.step.with;
 
     return this.stepExecutionRuntime.contextManager.renderValueAccordingToContext({
       service_credential,
