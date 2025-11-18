@@ -109,7 +109,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
         workflowYamls = [createSlackWorkflowTemplate(connectorId, feature)];
         break;
       case 'notion':
-        workflowYamls = createNotionSearchWorkflowTemplates(stackConnectorId, feature);
+        workflowYamls = createNotionSearchWorkflowTemplates(stackConnectorId);
         break;
       default:
         throw new Error(`Unsupported connector type: ${connectorType}`);

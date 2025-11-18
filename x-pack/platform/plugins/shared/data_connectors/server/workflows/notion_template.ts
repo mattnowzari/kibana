@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-function getSearchWorkflow(stackConnectorId: string): string {
+function generateSearchWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion search'
 description: 'Search for pages or data sources that contain a given string in the title'
@@ -31,10 +31,10 @@ steps:
 `;
 }
 
-function getQueryWorkflow(stackConnectorId: string): string {
+function generateQueryWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion query data source'
-description: 'Given the ID of a data source, query information about its columns'
+description: 'Given the ID of a data source, query information about its rows'
 enabled: true
 triggers:
   - type: 'manual'
@@ -51,6 +51,46 @@ steps:
 `;
 }
 
+function generateGetPageWorkflow(stackConnectorId: string): string {
+  return `version: '1'
+name: 'Notion get page'
+description: 'Given the ID of a Notion page, get metadata related to it'
+enabled: true
+triggers:
+  - type: 'manual'
+inputs:
+  - name: page_id
+    type: string
+steps:
+  - name: get-page
+    type: notion.getPage
+    connector-id: ${stackConnectorId}
+    with:
+      pageId: "\${{inputs.page_id}}"
+
+`;
+}
+
+function generateGetDataSourceWorkflow(stackConnectorId: string): string {
+  return `version: '1'
+name: 'Notion get data source'
+description: 'Given the ID of a data source, get information about its columns'
+enabled: true
+triggers:
+  - type: 'manual'
+inputs:
+  - name: data_source_id
+    type: string
+steps:
+  - name: get-data-source
+    type: notion.getDataSource
+    connector-id: ${stackConnectorId}
+    with:
+      dataSourceId: "\${{inputs.data_source_id}}"
+
+`;
+}
+
 /**
  * Creates a workflow template for Notion
  * @param stackConnectorId - The ID of the stack connector connected via OAuth
@@ -59,7 +99,11 @@ steps:
  */
 export function createNotionSearchWorkflowTemplates(
   stackConnectorId: string,
-  feature?: string
 ): string[] {
-  return [getSearchWorkflow(stackConnectorId), getQueryWorkflow(stackConnectorId)];
+  return [
+    generateSearchWorkflow(stackConnectorId),
+    generateQueryWorkflow(stackConnectorId),
+    generateGetPageWorkflow(stackConnectorId),
+    generateGetDataSourceWorkflow(stackConnectorId),
+  ];
 }
