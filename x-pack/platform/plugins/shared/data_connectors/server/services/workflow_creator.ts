@@ -17,6 +17,7 @@ import {
 } from '../workflows/google_drive_template';
 import { createSlackWorkflowTemplate } from '../workflows/slack_template';
 import { createNotionSearchWorkflowTemplate } from '../workflows/notion_template';
+import type { StackConnectorCreatorService } from './ksc_creator';
 
 export interface WorkflowCreatorService {
   createWorkflowForConnector(
@@ -24,7 +25,8 @@ export interface WorkflowCreatorService {
     connectorType: string,
     spaceId: string,
     request: KibanaRequest,
-    feature?: string
+    feature?: string,
+    secrets?: string
   ): Promise<string>;
   deleteWorkflows?(workflowIds: string[], spaceId: string, request: KibanaRequest): Promise<void>;
   deleteTools?(toolIds: string[], request: KibanaRequest): Promise<void>;
@@ -34,11 +36,16 @@ export class WorkflowCreator implements WorkflowCreatorService {
   constructor(
     private readonly logger: Logger,
     private readonly workflowsManagement: WorkflowsServerPluginSetup,
-    private onechat?: OnechatPluginStart
+    private onechat?: OnechatPluginStart,
+    private stackConnectorCreator?: StackConnectorCreatorService
   ) {}
 
   public setOnechat(onechat: OnechatPluginStart) {
     this.onechat = onechat;
+  }
+
+  public setStackConnectorCreator(stackConnectorCreator: StackConnectorCreatorService) {
+    this.stackConnectorCreator = stackConnectorCreator;
   }
 
   /**
@@ -47,6 +54,8 @@ export class WorkflowCreator implements WorkflowCreatorService {
    * @param connectorType - The type of connector (e.g., 'brave_search')
    * @param spaceId - The space ID where the workflow should be created
    * @param request - The Kibana request object
+   * @param feature - Optional feature flag
+   * @param secrets - Optional secrets (OAuth token for Notion)
    * @returns The ID of the created workflow
    */
   async createWorkflowForConnector(
@@ -54,11 +63,32 @@ export class WorkflowCreator implements WorkflowCreatorService {
     connectorType: string,
     spaceId: string,
     request: KibanaRequest,
-    feature?: string
+    feature?: string,
+    secrets?: string
   ): Promise<string> {
     this.logger.info(
       `Creating workflow for connector ${connectorId} of type ${connectorType} in space ${spaceId}`
     );
+
+    // For Notion connectors, create a Kibana stack connector first
+    if (connectorType === 'notion' && this.stackConnectorCreator && secrets) {
+      try {
+        const connectorName = `Notion Connector for ${connectorId}`;
+        await this.stackConnectorCreator.instantiateStackConnector(
+          connectorName,
+          connectorType,
+          secrets,
+          request,
+          feature
+        );
+        this.logger.info(`Created Kibana stack connector for Notion connector ${connectorId}`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to create Kibana stack connector for Notion: ${(error as Error).message}`
+        );
+        // Continue with workflow creation even if stack connector creation fails
+      }
+    }
 
     let workflowYaml: string;
 

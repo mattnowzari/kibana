@@ -61,7 +61,8 @@ async function createWorkflowsForConnector(
   workflowCreator: WorkflowCreatorService,
   request: KibanaRequest,
   logger: Logger,
-  forceCreate: boolean = false
+  forceCreate: boolean = false,
+  secrets?: { access_token?: string; refresh_token?: string; expires_in?: string }
 ): Promise<{ workflowId?: string; workflowIds: string[]; toolIds: string[] }> {
   try {
     // Check if workflows already exist for this connector (unless forcing creation)
@@ -98,7 +99,8 @@ async function createWorkflowsForConnector(
         connectorType,
         spaceId,
         request,
-        feature
+        feature,
+        secrets?.access_token
       );
       workflowIds.push(createdWorkflowId);
       toolIds.push(`${connectorType}.${feature}`.slice(0, 64));
@@ -521,7 +523,8 @@ export function registerConnectorRoutes(
             workflowCreator,
             request,
             logger,
-            shouldRegenerateWorkflows // forceCreate = true when regenerating
+            shouldRegenerateWorkflows, // forceCreate = true when regenerating
+            oauthSecrets // Pass OAuth secrets for Notion connector creation
           );
         } else {
           logger.info(
