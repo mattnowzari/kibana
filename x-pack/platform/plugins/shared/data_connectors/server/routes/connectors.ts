@@ -94,7 +94,7 @@ async function createWorkflowsForConnector(
     const spaceId = savedObjectsClient.getCurrentNamespace() ?? DEFAULT_NAMESPACE_STRING;
 
     for (const feature of features) {
-      const createdWorkflowId = await workflowCreator.createWorkflowForConnector(
+      const createdWorkflowIds = await workflowCreator.createWorkflowForConnector(
         connectorId,
         connectorType,
         spaceId,
@@ -102,7 +102,7 @@ async function createWorkflowsForConnector(
         feature,
         secrets?.access_token
       );
-      workflowIds.push(createdWorkflowId);
+      workflowIds.push(...createdWorkflowIds);
       toolIds.push(`${connectorType}.${feature}`.slice(0, 64));
     }
 

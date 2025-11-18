@@ -5,16 +5,7 @@
  * 2.0.
  */
 
-/**
- * Creates a workflow template for Notion
- * @param stackConnectorId - The ID of the stack connector connected via OAuth
- * @param feature - Optional capability/feature (e.g., 'search_web')
- * @returns Workflow YAML template with secret reference
- */
-export function createNotionSearchWorkflowTemplate(
-  stackConnectorId: string,
-  feature?: string
-): string {
+function getSearchWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion search'
 description: 'Search for pages or data sources that contain a given string in the title'
@@ -38,4 +29,37 @@ steps:
       queryObjectType: "\${{inputs.query_object}}"
 
 `;
+}
+
+function getQueryWorkflow(stackConnectorId: string): string {
+  return `version: '1'
+name: 'Notion query data source'
+description: 'Given the ID of a data source, query information about its columns'
+enabled: true
+triggers:
+  - type: 'manual'
+inputs:
+  - name: data_source_id
+    type: string
+steps:
+  - name: query-data-source
+    type: notion.queryDataSource
+    connector-id: ${stackConnectorId}
+    with:
+      dataSourceId: "\${{inputs.data_source_id}}"
+
+`;
+}
+
+/**
+ * Creates a workflow template for Notion
+ * @param stackConnectorId - The ID of the stack connector connected via OAuth
+ * @param feature - Optional capability/feature (e.g., 'search_web')
+ * @returns Workflow YAML template with secret reference
+ */
+export function createNotionSearchWorkflowTemplates(
+  stackConnectorId: string,
+  feature?: string
+): string[] {
+  return [getSearchWorkflow(stackConnectorId), getQueryWorkflow(stackConnectorId)];
 }

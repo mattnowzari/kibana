@@ -10,13 +10,14 @@ import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugi
 import type { KibanaRequest } from '@kbn/core/server';
 import { ToolType } from '@kbn/onechat-common';
 import type { OnechatPluginStart } from '@kbn/onechat-plugin/server';
+import { kebabCase, lowerCase } from 'lodash';
 import { createBraveSearchWorkflowTemplate } from '../workflows/brave_search_template';
 import {
   createGoogleDriveWorkflowTemplate,
   // createGoogleDriveDownloadWorkflowTemplate,
 } from '../workflows/google_drive_template';
 import { createSlackWorkflowTemplate } from '../workflows/slack_template';
-import { createNotionSearchWorkflowTemplate } from '../workflows/notion_template';
+import { createNotionSearchWorkflowTemplates } from '../workflows/notion_template';
 import type { StackConnectorCreatorService } from './ksc_creator';
 
 export interface WorkflowCreatorService {
@@ -27,7 +28,7 @@ export interface WorkflowCreatorService {
     request: KibanaRequest,
     feature?: string,
     secrets?: string
-  ): Promise<string>;
+  ): Promise<string[]>;
   deleteWorkflows?(workflowIds: string[], spaceId: string, request: KibanaRequest): Promise<void>;
   deleteTools?(toolIds: string[], request: KibanaRequest): Promise<void>;
 }
@@ -65,7 +66,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
     request: KibanaRequest,
     feature?: string,
     secrets?: string
-  ): Promise<string> {
+  ): Promise<string[]> {
     this.logger.info(
       `Creating workflow for connector ${connectorId} of type ${connectorType} in space ${spaceId}`
     );
@@ -93,75 +94,81 @@ export class WorkflowCreator implements WorkflowCreatorService {
       }
     }
 
-    let workflowYaml: string;
+    let workflowYamls: string[];
 
     // Get the appropriate template based on connector type
     // Template includes secret reference that will be resolved at runtime
     switch (connectorType) {
       case 'brave_search':
-        workflowYaml = createBraveSearchWorkflowTemplate(connectorId, feature);
+        workflowYamls = [createBraveSearchWorkflowTemplate(connectorId, feature)];
         break;
       case 'google_drive':
-        workflowYaml = createGoogleDriveWorkflowTemplate(connectorId, feature);
+        workflowYamls = [createGoogleDriveWorkflowTemplate(connectorId, feature)];
         break;
       case 'slack':
-        workflowYaml = createSlackWorkflowTemplate(connectorId, feature);
+        workflowYamls = [createSlackWorkflowTemplate(connectorId, feature)];
         break;
       case 'notion':
-        workflowYaml = createNotionSearchWorkflowTemplate(stackConnectorId, feature);
+        workflowYamls = createNotionSearchWorkflowTemplates(stackConnectorId, feature);
         break;
       default:
         throw new Error(`Unsupported connector type: ${connectorType}`);
     }
 
-    try {
-      // Create the workflow using the workflows management API
-      const workflow = await this.workflowsManagement.management.createWorkflow(
-        {
-          yaml: workflowYaml,
-        },
-        spaceId,
-        request
-      );
-
-      this.logger.info(`Successfully created workflow ${workflow.id} for connector ${connectorId}`);
-
-      // Optionally create a Onechat workflow tool tied to the created workflow
+    const workflowIds: string[] = [];
+    for (const workflowYaml of workflowYamls) {
       try {
-        if (this.onechat) {
-          const registry = await this.onechat.tools.getRegistry({ request });
-          const suffix = feature ? `.${feature}` : '';
-          const toolId = `${connectorType}${suffix}`.slice(0, 64);
+        // Create the workflow using the workflows management API
+        const workflow = await this.workflowsManagement.management.createWorkflow(
+          {
+            yaml: workflowYaml,
+          },
+          spaceId,
+          request
+        );
+        workflowIds.push(workflow.id);
 
-          await registry.create({
-            id: toolId,
-            type: ToolType.workflow,
-            description: workflow.description,
-            configuration: {
-              workflow_id: workflow.id,
-            },
-            tags: ['workplace_ai', connectorType, ...(feature ? [feature] : [])],
-          });
-          this.logger.info(
-            `Created Onechat workflow tool ${toolId} for workflow ${workflow.id} (connector ${connectorId})`
-          );
-        } else {
-          this.logger.debug?.(
-            `Onechat start contract not available; skipping tool creation for workflow ${workflow.id}`
+        this.logger.info(
+          `Successfully created workflow ${workflow.id} for connector ${connectorId}`
+        );
+
+        // Optionally create a Onechat workflow tool tied to the created workflow
+        try {
+          if (this.onechat) {
+            const registry = await this.onechat.tools.getRegistry({ request });
+            const toolId = `${connectorType}.${kebabCase(lowerCase(workflow.name))}`;
+
+            await registry.create({
+              id: toolId,
+              type: ToolType.workflow,
+              description: workflow.description,
+              configuration: {
+                workflow_id: workflow.id,
+              },
+              tags: ['workplace_ai', connectorType, ...(feature ? [feature] : [])],
+            });
+            this.logger.info(
+              `Created Onechat workflow tool ${toolId} for workflow ${workflow.id} (connector ${connectorId})`
+            );
+          } else {
+            this.logger.debug?.(
+              `Onechat start contract not available; skipping tool creation for workflow ${workflow.id}`
+            );
+          }
+        } catch (toolErr) {
+          this.logger.warn(
+            `Failed to create Onechat workflow tool for workflow ${workflow.id}: ` +
+              (toolErr as Error).message
           );
         }
-      } catch (toolErr) {
-        this.logger.warn(
-          `Failed to create Onechat workflow tool for workflow ${workflow.id}: ` +
-            (toolErr as Error).message
+      } catch (error) {
+        this.logger.error(
+          `Failed to create workflow for connector ${connectorId}: ${error.message}`
         );
+        throw error;
       }
-
-      return workflow.id;
-    } catch (error) {
-      this.logger.error(`Failed to create workflow for connector ${connectorId}: ${error.message}`);
-      throw error;
     }
+    return workflowIds;
   }
 
   public async deleteWorkflows(workflowIds: string[], spaceId: string, request: KibanaRequest) {
