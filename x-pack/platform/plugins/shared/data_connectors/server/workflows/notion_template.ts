@@ -7,26 +7,35 @@
 
 /**
  * Creates a workflow template for Notion
- * @param connectorId - The ID of the workplace connector containing the API key
+ * @param stackConnectorId - The ID of the stack connector connected via OAuth
  * @param feature - Optional capability/feature (e.g., 'search_web')
  * @returns Workflow YAML template with secret reference
  */
-export function createNotionSearchWorkflowTemplate(connectorId: string, feature?: string): string {
-  const workflowName = feature ? `notion_search.${feature}` : 'notion_search';
+export function createNotionSearchWorkflowTemplate(
+  stackConnectorId: string,
+  feature?: string
+): string {
   return `version: '1'
-name: '${workflowName}'
-description: 'Search using Notion Search API'
+name: 'Notion search'
+description: 'Search for pages or data sources that contain a given string in the title'
 enabled: true
 triggers:
   - type: 'manual'
 inputs:
-  - name: query
+  - name: query_string
     type: string
-    description: The query to search for
+  - name: query_object
+    type: choice
+    options:
+      - "page"
+      - "data_source"
 steps:
-  - name: search-notion
-    type: console
+  - name: search-page-by-title
+    type: notion.searchPageByTitle
+    connector-id: ${stackConnectorId}
     with:
-      message: Notion API call
+      query: "\${{inputs.query_string}}"
+      queryObjectType: "\${{inputs.query_object}}"
+
 `;
 }

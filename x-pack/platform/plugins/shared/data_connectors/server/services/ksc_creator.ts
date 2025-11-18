@@ -20,10 +20,7 @@ export interface StackConnectorCreatorService {
 }
 
 export class StackConnectorCreator implements StackConnectorCreatorService {
-  constructor(
-    private readonly logger: Logger,
-    private actions?: ActionsPluginStart
-  ) {}
+  constructor(private readonly logger: Logger, private actions?: ActionsPluginStart) {}
 
   public setActions(actions: ActionsPluginStart) {
     this.actions = actions;

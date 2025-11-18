@@ -69,19 +69,22 @@ export class WorkflowCreator implements WorkflowCreatorService {
     this.logger.info(
       `Creating workflow for connector ${connectorId} of type ${connectorType} in space ${spaceId}`
     );
+    let stackConnectorId = '';
 
     // For Notion connectors, create a Kibana stack connector first
     if (connectorType === 'notion' && this.stackConnectorCreator && secrets) {
       try {
         const connectorName = `Notion Connector for ${connectorId}`;
-        await this.stackConnectorCreator.instantiateStackConnector(
+        stackConnectorId = await this.stackConnectorCreator.instantiateStackConnector(
           connectorName,
           connectorType,
           secrets,
           request,
           feature
         );
-        this.logger.info(`Created Kibana stack connector for Notion connector ${connectorId}`);
+        this.logger.info(
+          `Created Kibana stack connector ${stackConnectorId} for Notion connector ${connectorId}`
+        );
       } catch (error) {
         this.logger.warn(
           `Failed to create Kibana stack connector for Notion: ${(error as Error).message}`
@@ -105,7 +108,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
         workflowYaml = createSlackWorkflowTemplate(connectorId, feature);
         break;
       case 'notion':
-        workflowYaml = createNotionSearchWorkflowTemplate(connectorId, feature);
+        workflowYaml = createNotionSearchWorkflowTemplate(stackConnectorId, feature);
         break;
       default:
         throw new Error(`Unsupported connector type: ${connectorType}`);
@@ -129,13 +132,11 @@ export class WorkflowCreator implements WorkflowCreatorService {
           const registry = await this.onechat.tools.getRegistry({ request });
           const suffix = feature ? `.${feature}` : '';
           const toolId = `${connectorType}${suffix}`.slice(0, 64);
-          const toolDescription = `Workflow tool for ${connectorType}${
-            suffix ? ` (${feature})` : ''
-          }`;
+
           await registry.create({
             id: toolId,
             type: ToolType.workflow,
-            description: toolDescription,
+            description: workflow.description,
             configuration: {
               workflow_id: workflow.id,
             },
