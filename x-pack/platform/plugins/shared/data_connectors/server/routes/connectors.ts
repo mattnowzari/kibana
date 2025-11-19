@@ -97,7 +97,7 @@ async function createWorkflowsForConnector(
     const spaceId = savedObjectsClient.getCurrentNamespace() ?? DEFAULT_NAMESPACE_STRING;
 
     for (const feature of features) {
-      const [createdWorkflowIds, stackConnectorId] =
+      const [createdWorkflowIds, toolIds_, stackConnectorId] =
         await workflowCreator.createWorkflowForConnector(
           connectorId,
           connectorType,
@@ -107,7 +107,7 @@ async function createWorkflowsForConnector(
           secrets?.access_token
         );
       workflowIds.push(...createdWorkflowIds);
-      toolIds.push(`${connectorType}.${feature}`.slice(0, 64));
+      toolIds.push(...toolIds_);
       if (stackConnectorId) kscIds.push(stackConnectorId);
     }
 
@@ -815,6 +815,7 @@ export function registerConnectorRoutes(
           if (attrs.workflowIds?.length) workflowIds.push(...attrs.workflowIds);
           if (attrs.toolIds?.length) toolIds = attrs.toolIds;
           if (attrs.kscIds?.length) kscIds = attrs.kscIds;
+          logger.info('Cascade deleting kscIds: ' + kscIds.join(', '));
         } catch (e) {
           // ignore if not found
         }

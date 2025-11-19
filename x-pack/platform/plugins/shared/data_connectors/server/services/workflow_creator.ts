@@ -28,7 +28,7 @@ export interface WorkflowCreatorService {
     request: KibanaRequest,
     feature?: string,
     secrets?: string
-  ): Promise<[string[], string]>;
+  ): Promise<[string[], string[], string]>;
   deleteKSCs?(stackConnectorIds: string[], request: KibanaRequest): Promise<void>;
   deleteWorkflows?(workflowIds: string[], spaceId: string, request: KibanaRequest): Promise<void>;
   deleteTools?(toolIds: string[], request: KibanaRequest): Promise<void>;
@@ -63,11 +63,12 @@ export class WorkflowCreator implements WorkflowCreatorService {
     request: KibanaRequest,
     feature?: string,
     secrets?: string
-  ): Promise<[string[], string]> {
+  ): Promise<[string[], string[], string]> {
     this.logger.info(
       `Creating workflow for connector ${connectorId} of type ${connectorType} in space ${spaceId}`
     );
     let stackConnectorId = '';
+    const toolIds: string[] = [];
 
     // For Notion connectors, create a Kibana stack connector first
     if (connectorType === 'notion' && this.stackConnectorCreator && secrets) {
@@ -144,6 +145,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
               },
               tags: ['workplace_ai', connectorType, ...(feature ? [feature] : [])],
             });
+            toolIds.push(toolId);
             this.logger.info(
               `Created Onechat workflow tool ${toolId} for workflow ${workflow.id} (connector ${connectorId})`
             );
@@ -165,13 +167,14 @@ export class WorkflowCreator implements WorkflowCreatorService {
         throw error;
       }
     }
-    return [workflowIds, stackConnectorId];
+    return [workflowIds, toolIds, stackConnectorId];
   }
 
   public async deleteKSCs(stackConnectorIds: string[], request: KibanaRequest) {
     if (!this.stackConnectorCreator) {
       this.logger.info('Stack connector creator not available; skipping KSC deletion');
     }
+    this.logger.info(`Deleting KSCs: ${stackConnectorIds.join(', ')}`);
     try {
       for (const stackConnectorId of stackConnectorIds) {
         await this.stackConnectorCreator.disconnectStackConnector(stackConnectorId, request);

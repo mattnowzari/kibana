@@ -105,5 +105,6 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
     }
     const actionsClient = await this.actions.getActionsClientWithRequest(request);
     await actionsClient.delete({ id: connectorId });
+    this.logger.info(`Successfully deleted Kibana stack connector ${connectorId}`);
   }
 }
