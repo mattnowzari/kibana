@@ -896,6 +896,7 @@ export function registerConnectorRoutes(
         const connectors = findResponse.saved_objects;
         const workflowIds: string[] = [];
         const toolIds: string[] = [];
+        const kscIds: string[] = [];
 
         // Collect all workflow and tool IDs before deletion
         for (const connector of connectors) {
@@ -903,10 +904,12 @@ export function registerConnectorRoutes(
             workflowId?: string;
             workflowIds?: string[];
             toolIds?: string[];
+            kscIds?: string[];
           };
           if (attrs.workflowId) workflowIds.push(attrs.workflowId);
           if (attrs.workflowIds?.length) workflowIds.push(...attrs.workflowIds);
           if (attrs.toolIds?.length) toolIds.push(...attrs.toolIds);
+          if (attrs.kscIds?.length) kscIds.push(...attrs.kscIds);
         }
 
         // Delete all connectors
@@ -930,6 +933,14 @@ export function registerConnectorRoutes(
           }
         } catch (err) {
           logger.warn(`Failed to delete some tools: ${(err as Error).message}`);
+        }
+
+        try {
+          if (kscIds.length > 0 && workflowCreator.deleteKSCs) {
+            await workflowCreator.deleteKSCs(kscIds, request);
+          }
+        } catch (err) {
+          logger.warn(`Failed to delete some Kibana stack connectors: ${(err as Error).message}`);
         }
 
         return response.ok({
