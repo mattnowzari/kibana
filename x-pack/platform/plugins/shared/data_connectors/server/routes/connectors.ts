@@ -61,7 +61,8 @@ async function createWorkflowsForConnector(
   workflowCreator: WorkflowCreatorService,
   request: KibanaRequest,
   logger: Logger,
-  forceCreate: boolean = false
+  forceCreate: boolean = false,
+  secrets?: { access_token?: string; refresh_token?: string; expires_in?: string }
 ): Promise<{ workflowId?: string; workflowIds: string[]; toolIds: string[] }> {
   try {
     // Check if workflows already exist for this connector (unless forcing creation)
@@ -77,7 +78,9 @@ async function createWorkflowsForConnector(
       // If workflows already exist, reuse them
       if (existingWorkflowIds.length > 0) {
         logger.info(
-          `Reusing existing workflows for connector ${connectorId}: ${existingWorkflowIds.join(', ')}`
+          `Reusing existing workflows for connector ${connectorId}: ${existingWorkflowIds.join(
+            ', '
+          )}`
         );
         return {
           workflowId: attrs.workflowId,
@@ -90,18 +93,22 @@ async function createWorkflowsForConnector(
     // Create new workflows if they don't exist
     const workflowIds: string[] = [];
     const toolIds: string[] = [];
+    const kscIds: string[] = [];
     const spaceId = savedObjectsClient.getCurrentNamespace() ?? DEFAULT_NAMESPACE_STRING;
 
     for (const feature of features) {
-      const createdWorkflowId = await workflowCreator.createWorkflowForConnector(
-        connectorId,
-        connectorType,
-        spaceId,
-        request,
-        feature
-      );
-      workflowIds.push(createdWorkflowId);
-      toolIds.push(`${connectorType}.${feature}`.slice(0, 64));
+      const [createdWorkflowIds, toolIds_, stackConnectorId] =
+        await workflowCreator.createWorkflowForConnector(
+          connectorId,
+          connectorType,
+          spaceId,
+          request,
+          feature,
+          secrets?.access_token
+        );
+      workflowIds.push(...createdWorkflowIds);
+      toolIds.push(...toolIds_);
+      if (stackConnectorId) kscIds.push(stackConnectorId);
     }
 
     const workflowId = workflowIds[0];
@@ -110,6 +117,7 @@ async function createWorkflowsForConnector(
       workflowId,
       workflowIds,
       toolIds,
+      kscIds,
     });
 
     return { workflowId, workflowIds, toolIds };
@@ -521,7 +529,8 @@ export function registerConnectorRoutes(
             workflowCreator,
             request,
             logger,
-            shouldRegenerateWorkflows // forceCreate = true when regenerating
+            shouldRegenerateWorkflows, // forceCreate = true when regenerating
+            oauthSecrets // Pass OAuth secrets for Notion connector creation
           );
         } else {
           logger.info(
@@ -793,16 +802,20 @@ export function registerConnectorRoutes(
         // Cascade delete related workflows/tools (best-effort)
         const workflowIds: string[] = [];
         let toolIds: string[] = [];
+        let kscIds: string[] = [];
         try {
           const existing = await savedObjectsClient.get(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, id);
           const attrs = existing.attributes as unknown as {
             workflowId?: string;
             workflowIds?: string[];
             toolIds?: string[];
+            kscIds?: string[];
           };
           if (attrs.workflowId) workflowIds.push(attrs.workflowId);
           if (attrs.workflowIds?.length) workflowIds.push(...attrs.workflowIds);
           if (attrs.toolIds?.length) toolIds = attrs.toolIds;
+          if (attrs.kscIds?.length) kscIds = attrs.kscIds;
+          logger.info('Cascade deleting kscIds: ' + kscIds.join(', '));
         } catch (e) {
           // ignore if not found
         }
@@ -818,6 +831,13 @@ export function registerConnectorRoutes(
         try {
           if (toolIds.length > 0 && workflowCreator.deleteTools) {
             await workflowCreator.deleteTools(toolIds, request);
+          }
+        } catch {
+          // ignore
+        }
+        try {
+          if (kscIds.length > 0 && workflowCreator.deleteKSCs) {
+            await workflowCreator.deleteKSCs(kscIds, request);
           }
         } catch {
           // ignore
@@ -876,6 +896,7 @@ export function registerConnectorRoutes(
         const connectors = findResponse.saved_objects;
         const workflowIds: string[] = [];
         const toolIds: string[] = [];
+        const kscIds: string[] = [];
 
         // Collect all workflow and tool IDs before deletion
         for (const connector of connectors) {
@@ -883,10 +904,12 @@ export function registerConnectorRoutes(
             workflowId?: string;
             workflowIds?: string[];
             toolIds?: string[];
+            kscIds?: string[];
           };
           if (attrs.workflowId) workflowIds.push(attrs.workflowId);
           if (attrs.workflowIds?.length) workflowIds.push(...attrs.workflowIds);
           if (attrs.toolIds?.length) toolIds.push(...attrs.toolIds);
+          if (attrs.kscIds?.length) kscIds.push(...attrs.kscIds);
         }
 
         // Delete all connectors
@@ -910,6 +933,14 @@ export function registerConnectorRoutes(
           }
         } catch (err) {
           logger.warn(`Failed to delete some tools: ${(err as Error).message}`);
+        }
+
+        try {
+          if (kscIds.length > 0 && workflowCreator.deleteKSCs) {
+            await workflowCreator.deleteKSCs(kscIds, request);
+          }
+        } catch (err) {
+          logger.warn(`Failed to delete some Kibana stack connectors: ${(err as Error).message}`);
         }
 
         return response.ok({
