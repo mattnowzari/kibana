@@ -78,7 +78,9 @@ async function createWorkflowsForConnector(
       // If workflows already exist, reuse them
       if (existingWorkflowIds.length > 0) {
         logger.info(
-          `Reusing existing workflows for connector ${connectorId}: ${existingWorkflowIds.join(', ')}`
+          `Reusing existing workflows for connector ${connectorId}: ${existingWorkflowIds.join(
+            ', '
+          )}`
         );
         return {
           workflowId: attrs.workflowId,
@@ -91,19 +93,22 @@ async function createWorkflowsForConnector(
     // Create new workflows if they don't exist
     const workflowIds: string[] = [];
     const toolIds: string[] = [];
+    const kscIds: string[] = [];
     const spaceId = savedObjectsClient.getCurrentNamespace() ?? DEFAULT_NAMESPACE_STRING;
 
     for (const feature of features) {
-      const createdWorkflowIds = await workflowCreator.createWorkflowForConnector(
-        connectorId,
-        connectorType,
-        spaceId,
-        request,
-        feature,
-        secrets?.access_token
-      );
+      const [createdWorkflowIds, stackConnectorId] =
+        await workflowCreator.createWorkflowForConnector(
+          connectorId,
+          connectorType,
+          spaceId,
+          request,
+          feature,
+          secrets?.access_token
+        );
       workflowIds.push(...createdWorkflowIds);
       toolIds.push(`${connectorType}.${feature}`.slice(0, 64));
+      if (stackConnectorId) kscIds.push(stackConnectorId);
     }
 
     const workflowId = workflowIds[0];
@@ -112,6 +117,7 @@ async function createWorkflowsForConnector(
       workflowId,
       workflowIds,
       toolIds,
+      kscIds,
     });
 
     return { workflowId, workflowIds, toolIds };
@@ -796,16 +802,19 @@ export function registerConnectorRoutes(
         // Cascade delete related workflows/tools (best-effort)
         const workflowIds: string[] = [];
         let toolIds: string[] = [];
+        let kscIds: string[] = [];
         try {
           const existing = await savedObjectsClient.get(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, id);
           const attrs = existing.attributes as unknown as {
             workflowId?: string;
             workflowIds?: string[];
             toolIds?: string[];
+            kscIds?: string[];
           };
           if (attrs.workflowId) workflowIds.push(attrs.workflowId);
           if (attrs.workflowIds?.length) workflowIds.push(...attrs.workflowIds);
           if (attrs.toolIds?.length) toolIds = attrs.toolIds;
+          if (attrs.kscIds?.length) kscIds = attrs.kscIds;
         } catch (e) {
           // ignore if not found
         }
@@ -821,6 +830,13 @@ export function registerConnectorRoutes(
         try {
           if (toolIds.length > 0 && workflowCreator.deleteTools) {
             await workflowCreator.deleteTools(toolIds, request);
+          }
+        } catch {
+          // ignore
+        }
+        try {
+          if (kscIds.length > 0 && workflowCreator.deleteKSCs) {
+            await workflowCreator.deleteKSCs(kscIds, request);
           }
         } catch {
           // ignore

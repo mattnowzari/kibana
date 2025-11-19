@@ -17,6 +17,7 @@ export interface StackConnectorCreatorService {
     request: KibanaRequest,
     feature?: string
   ): Promise<string>;
+  disconnectStackConnector(connectorId: string, request: KibanaRequest): Promise<void>;
 }
 
 export class StackConnectorCreator implements StackConnectorCreatorService {
@@ -96,5 +97,13 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
     }
 
     return stackConnectorTypeId;
+  }
+
+  async disconnectStackConnector(connectorId: string, request: KibanaRequest): Promise<void> {
+    if (!this.actions) {
+      throw new Error('Actions plugin not available');
+    }
+    const actionsClient = await this.actions.getActionsClientWithRequest(request);
+    await actionsClient.delete({ id: connectorId });
   }
 }

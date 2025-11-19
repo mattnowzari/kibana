@@ -28,7 +28,8 @@ export interface WorkflowCreatorService {
     request: KibanaRequest,
     feature?: string,
     secrets?: string
-  ): Promise<string[]>;
+  ): Promise<[string[], string]>;
+  deleteKSCs?(stackConnectorIds: string[], request: KibanaRequest): Promise<void>;
   deleteWorkflows?(workflowIds: string[], spaceId: string, request: KibanaRequest): Promise<void>;
   deleteTools?(toolIds: string[], request: KibanaRequest): Promise<void>;
 }
@@ -43,10 +44,6 @@ export class WorkflowCreator implements WorkflowCreatorService {
 
   public setOnechat(onechat: OnechatPluginStart) {
     this.onechat = onechat;
-  }
-
-  public setStackConnectorCreator(stackConnectorCreator: StackConnectorCreatorService) {
-    this.stackConnectorCreator = stackConnectorCreator;
   }
 
   /**
@@ -66,7 +63,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
     request: KibanaRequest,
     feature?: string,
     secrets?: string
-  ): Promise<string[]> {
+  ): Promise<[string[], string]> {
     this.logger.info(
       `Creating workflow for connector ${connectorId} of type ${connectorType} in space ${spaceId}`
     );
@@ -168,7 +165,20 @@ export class WorkflowCreator implements WorkflowCreatorService {
         throw error;
       }
     }
-    return workflowIds;
+    return [workflowIds, stackConnectorId];
+  }
+
+  public async deleteKSCs(stackConnectorIds: string[], request: KibanaRequest) {
+    if (!this.stackConnectorCreator) {
+      this.logger.info('Stack connector creator not available; skipping KSC deletion');
+    }
+    try {
+      for (const stackConnectorId of stackConnectorIds) {
+        await this.stackConnectorCreator.disconnectStackConnector(stackConnectorId, request);
+      }
+    } catch (e) {
+      this.logger.warn(`Failed to delete KSCs: ${(e as Error).message}`);
+    }
   }
 
   public async deleteWorkflows(workflowIds: string[], spaceId: string, request: KibanaRequest) {
