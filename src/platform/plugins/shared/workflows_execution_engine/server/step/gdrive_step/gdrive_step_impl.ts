@@ -49,17 +49,6 @@ interface GDriveOperationInput {
   doc_limit?: number;
 }
 
-interface GDriveOperationInput {
-  service_credential?: Record<string, unknown>;
-  accessToken?: string; // OAuth access token (preferred, from SavedObject)
-  operation?: 'list' | 'get' | 'ping' | 'download' | 'search';
-  query?: string;
-  fileId?: string;
-  folderId?: string;
-  subject?: string;
-  doc_limit?: number;
-}
-
 interface ListFilesOutput {
   files: FileMetadata[];
   count: number;
@@ -112,7 +101,16 @@ export class GDriveStepImpl extends BaseAtomicNodeImplementation<GDriveStep> {
   }
 
   public getInput() {
-    const { service_credential, accessToken, operation, fileId, folderId, subject, query, doc_limit } = this.step.with;
+    const {
+      service_credential,
+      accessToken,
+      operation,
+      fileId,
+      folderId,
+      subject,
+      query,
+      doc_limit,
+    } = this.step.with;
 
     return this.stepExecutionRuntime.contextManager.renderValueAccordingToContext({
       service_credential,

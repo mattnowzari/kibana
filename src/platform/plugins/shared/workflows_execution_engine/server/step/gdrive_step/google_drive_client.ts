@@ -51,7 +51,7 @@ export interface ListFilesResponse {
 
 export class GoogleDriveClient {
   private auth: GoogleAuth | null = null;
-  private access_token: string | null = null;
+  private accessToken: string | null = null;
   private tokenExpiry: number = 0;
   private useOAuthToken: boolean;
 
@@ -60,12 +60,12 @@ export class GoogleDriveClient {
     // Otherwise, use service_credential for service account auth
     if (config.accessToken) {
       this.useOAuthToken = true;
-      this.access_token = config.accessToken;
+      this.accessToken = config.accessToken;
       // OAuth tokens typically expire in 1 hour, set expiry to 55 minutes to be safe
       this.tokenExpiry = Date.now() + 55 * 60 * 1000;
-    } else if (config.serviceCredential) {
+    } else if (config.service_credential) {
       this.useOAuthToken = false;
-      const credentials = { ...config.serviceCredential };
+      const credentials = { ...config.service_credential };
 
       // Remove universe_domain if present (not needed for auth)
       if (credentials.universe_domain) {
@@ -82,7 +82,7 @@ export class GoogleDriveClient {
         scopes: DRIVE_SCOPES,
       });
     } else {
-      throw new Error('Either access_token or service_credential must be provided');
+      throw new Error('Either accessToken or service_credential must be provided');
     }
   }
 
@@ -91,8 +91,8 @@ export class GoogleDriveClient {
    */
   private async getAccessToken(): Promise<string> {
     // If using OAuth token directly, return it (refresh logic would be handled externally)
-    if (this.useOAuthToken && this.access_token) {
-      return this.access_token;
+    if (this.useOAuthToken && this.accessToken) {
+      return this.accessToken;
     }
 
     // For service account auth, refresh token if expired
@@ -103,19 +103,19 @@ export class GoogleDriveClient {
     const now = Date.now();
 
     // Refresh token if expired or about to expire (within 5 minutes)
-    if (!this.access_token || this.tokenExpiry <= now + 5 * 60 * 1000) {
+    if (!this.accessToken || this.tokenExpiry <= now + 5 * 60 * 1000) {
       const tokenResponse = await this.auth.getAccessToken();
 
       if (!tokenResponse) {
         throw new Error('Failed to retrieve access token from Google Auth');
       }
 
-      this.access_token = tokenResponse;
+      this.accessToken = tokenResponse;
       // Tokens typically expire in 1 hour, set expiry to 55 minutes to be safe
       this.tokenExpiry = now + 55 * 60 * 1000;
     }
 
-    return this.access_token;
+    return this.accessToken;
   }
 
   /**

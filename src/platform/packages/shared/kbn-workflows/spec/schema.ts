@@ -209,9 +209,9 @@ export const GDriveStepSchema = BaseStepSchema.extend({
     fileName: z.string().optional(), // Required for upload
     fileContent: z.string().optional(), // Required for upload (can be base64 or plain text)
     folderId: z.string().optional(), // Optional folder filter for list, target folder for upload
-    query: z.string().optional(), // Required for search operation
     mimeType: z.string().optional(), // MIME type for upload
     subject: z.string().optional(), // For domain-wide delegation
+    query: z.string().optional(), // For search action
     doc_limit: z.number().optional(), // For search and list to limit the number of results returned
   }),
 })
