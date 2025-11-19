@@ -82,7 +82,7 @@ export const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
     defaultFeatures: ['search_files'],
     customFlyoutComponentId: 'notion_connector_flyout',
     saveConfig: {
-      secretsMapping: {},
+      secretsMapping: { token: 'token' },
       config: {},
       featuresField: 'features',
     },
