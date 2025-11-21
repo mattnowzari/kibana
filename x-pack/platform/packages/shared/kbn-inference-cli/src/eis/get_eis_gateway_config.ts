@@ -100,6 +100,7 @@ export async function getEisGatewayConfig({
           security: false,
         },
       },
+      task_types: ['embed/text/sparse'],
     },
     'jina-embeddings-v3': {
       allow_cloud_trials: true,
@@ -116,6 +117,7 @@ export async function getEisGatewayConfig({
           security: false,
         },
       },
+      task_types: ['embed/text/dense'],
     },
   };
 
