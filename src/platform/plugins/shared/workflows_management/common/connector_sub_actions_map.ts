@@ -33,9 +33,17 @@ import {
   SUB_ACTION as NOTION_SUB_ACTION,
 } from '@kbn/stack-connectors-plugin/common/notion/constants';
 import {
+  GITHUB_CONNECTOR_ID,
+  SUB_ACTION as GITHUB_SUB_ACTION,
+} from '@kbn/stack-connectors-plugin/common/github/constants';
+import {
   CONNECTOR_ID as OPENAI_CONNECTOR_ID,
   SUB_ACTION as OPENAI_SUB_ACTION,
 } from '@kbn/connector-schemas/openai/constants';
+import {
+  CONNECTOR_ID as SENTINELONE_CONNECTOR_ID,
+  SUB_ACTION as SENTINELONE_SUB_ACTION,
+} from '@kbn/connector-schemas/sentinelone/constants';
 import {
   CONNECTOR_ID as OpsgenieConnectorTypeId,
   SUB_ACTION as OpsgenieSubActions,
@@ -121,6 +129,8 @@ function createSubActionsMapping() {
     { id: TINES_CONNECTOR_ID, actions: TINES_SUB_ACTION },
     { id: XSOAR_CONNECTOR_ID, actions: XSOAR_SUB_ACTION },
     { id: NOTION_CONNECTOR_ID, actions: NOTION_SUB_ACTION },
+    { id: GITHUB_CONNECTOR_ID, actions: GITHUB_SUB_ACTION },
+    { id: SENTINELONE_CONNECTOR_ID, actions: SENTINELONE_SUB_ACTION },
     { id: D3_SECURITY_CONNECTOR_ID, actions: D3SECURITY_SUB_ACTION },
     { id: JIRA_SERVICE_MANAGEMENT_CONNECTOR_TYPE_ID, actions: JiraServiceManagementSubActions },
     { id: OpsgenieConnectorTypeId, actions: OpsgenieSubActions },

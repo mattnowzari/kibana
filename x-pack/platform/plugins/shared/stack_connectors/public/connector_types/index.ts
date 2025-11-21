@@ -38,6 +38,7 @@ import { getTheHiveConnectorType } from './thehive';
 import { getCrowdStrikeConnectorType } from './crowdstrike';
 import { getXSOARConnectorType } from './xsoar';
 import { getJiraServiceManagementConnectorType } from './jira-service-management';
+import { getGitHubConnectorType } from './github';
 import { getNotionConnectorType } from './notion';
 
 export interface RegistrationServices {
@@ -80,6 +81,7 @@ export function registerConnectorTypes({
   connectorTypeRegistry.register(getD3SecurityConnectorType());
   connectorTypeRegistry.register(getTheHiveConnectorType());
   connectorTypeRegistry.register(getXSOARConnectorType());
+  connectorTypeRegistry.register(getGitHubConnectorType());
   connectorTypeRegistry.register(getNotionConnectorType());
 
   if (ExperimentalFeaturesService.get().sentinelOneConnectorOn) {

@@ -23,8 +23,9 @@ import {
 } from '@elastic/eui';
 import { GoogleDriveLogo } from './google_drive_logo';
 import { NotionLogo } from './notion_logo';
+import { GitHubLogo } from './github_logo';
 
-export type ConnectorType = 'google_drive' | 'notion';
+export type ConnectorType = 'google_drive' | 'notion' | 'github';
 
 interface ConnectorConfig {
   displayName: string;
@@ -52,6 +53,15 @@ const CONNECTOR_CONFIGS: Record<ConnectorType, ConnectorConfig> = {
       'Connect to Notion to enable federated search. OAuth authorization will be handled automatically.',
     connectDescription:
       "Click Connect to authenticate with Notion. You'll be redirected to complete the OAuth flow in a new tab.",
+  },
+  github: {
+    displayName: 'GitHub',
+    logo: GitHubLogo,
+    apiRoute: '/api/workplace_connectors/github/initiate',
+    description:
+      'Connect to GitHub to search repositories and access repository data. OAuth authorization will be handled automatically.',
+    connectDescription:
+      "Click Connect to authenticate with GitHub. You'll be redirected to complete the OAuth flow in a new tab.",
   },
 };
 

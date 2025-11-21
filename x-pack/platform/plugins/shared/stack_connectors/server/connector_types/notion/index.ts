@@ -37,7 +37,7 @@ import {
   NotionSearchActionResponseSchema,
   NotionSecretsSchema,
 } from '../../../common/notion/schema';
-import type { ExecutorParams } from '../../../common/xsoar/types';
+import type { ExecutorParams } from '@kbn/actions-plugin/server/sub_action_framework/types';
 
 export class NotionConnector extends SubActionConnector<NotionConfig, NotionSecrets> {
   constructor(params: ServiceParams<NotionConfig, NotionSecrets>) {

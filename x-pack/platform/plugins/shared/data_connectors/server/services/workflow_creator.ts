@@ -17,6 +17,7 @@ import {
   // createGoogleDriveDownloadWorkflowTemplate,
 } from '../workflows/google_drive_template';
 import { createSlackWorkflowTemplate } from '../workflows/slack_template';
+import { createGithubSearchWorkflowTemplates } from '../workflows/github_template';
 import { createNotionSearchWorkflowTemplates } from '../workflows/notion_template';
 import type { StackConnectorCreatorService } from './ksc_creator';
 
@@ -49,12 +50,12 @@ export class WorkflowCreator implements WorkflowCreatorService {
   /**
    * Creates a workflow for a given connector
    * @param connectorId - The ID of the workplace connector
-   * @param connectorType - The type of connector (e.g., 'brave_search')
+   * @param connectorType - The type of connector (e.g., 'brave_search', 'notion', 'github')
    * @param spaceId - The space ID where the workflow should be created
    * @param request - The Kibana request object
    * @param feature - Optional feature flag
-   * @param secrets - Optional secrets (OAuth token for Notion)
-   * @returns The ID of the created workflow
+   * @param secrets - Optional secrets (OAuth token for Notion/GitHub)
+   * @returns Tuple of [workflowIds, toolIds, stackConnectorId]
    */
   async createWorkflowForConnector(
     connectorId: string,
@@ -92,6 +93,28 @@ export class WorkflowCreator implements WorkflowCreatorService {
       }
     }
 
+    // For GitHub connectors, create a Kibana stack connector first
+    if (connectorType === 'github' && this.stackConnectorCreator && secrets) {
+      try {
+        const connectorName = `GitHub Connector for ${connectorId}`;
+        stackConnectorId = await this.stackConnectorCreator.instantiateStackConnector(
+          connectorName,
+          connectorType,
+          secrets,
+          request,
+          feature
+        );
+        this.logger.info(
+          `Created Kibana stack connector ${stackConnectorId} for GitHub connector ${connectorId}`
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to create Kibana stack connector for GitHub: ${(error as Error).message}`
+        );
+        // Continue with workflow creation even if stack connector creation fails
+      }
+    }
+
     let workflowYamls: string[];
 
     // Get the appropriate template based on connector type
@@ -108,6 +131,9 @@ export class WorkflowCreator implements WorkflowCreatorService {
         break;
       case 'notion':
         workflowYamls = createNotionSearchWorkflowTemplates(stackConnectorId);
+        break;
+      case 'github':
+        workflowYamls = createGithubSearchWorkflowTemplates(stackConnectorId);
         break;
       default:
         throw new Error(`Unsupported connector type: ${connectorType}`);
@@ -173,6 +199,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
   public async deleteKSCs(stackConnectorIds: string[], request: KibanaRequest) {
     if (!this.stackConnectorCreator) {
       this.logger.info('Stack connector creator not available; skipping KSC deletion');
+      return;
     }
     this.logger.info(`Deleting KSCs: ${stackConnectorIds.join(', ')}`);
     try {

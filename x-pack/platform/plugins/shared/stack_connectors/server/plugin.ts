@@ -20,6 +20,7 @@ import {
   getWellKnownEmailServiceRoute,
   getWebhookSecretHeadersKeyRoute,
   notionOAuthProxyRoutes,
+  githubOAuthProxyRoutes,
 } from './routes';
 import type { ExperimentalFeatures } from '../common/experimental_features';
 import { parseExperimentalConfigValue } from '../common/experimental_features';
@@ -59,6 +60,7 @@ export class StackConnectorsPlugin
     validSlackApiChannelsRoute(router, actions.getActionsConfigurationUtilities(), this.logger);
     getWebhookSecretHeadersKeyRoute(router, core.getStartServices);
     notionOAuthProxyRoutes(router);
+    githubOAuthProxyRoutes(router);
 
     registerConnectorTypes({
       actions,
