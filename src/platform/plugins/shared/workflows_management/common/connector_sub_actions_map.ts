@@ -37,6 +37,10 @@ import {
   SUB_ACTION as OpsgenieSubActions,
 } from '@kbn/connector-schemas/opsgenie/constants';
 import {
+  CONNECTOR_ID as SENTINELONE_CONNECTOR_ID,
+  SUB_ACTION as SENTINELONE_SUB_ACTION,
+} from '@kbn/connector-schemas/sentinelone/constants';
+import {
   CONNECTOR_ID as THEHIVE_CONNECTOR_ID,
   SUB_ACTION as THEHIVE_SUB_ACTION,
 } from '@kbn/connector-schemas/thehive/constants';
@@ -49,41 +53,9 @@ import {
   SUB_ACTION as XSOAR_SUB_ACTION,
 } from '@kbn/connector-schemas/xsoar/constants';
 import {
-  BEDROCK_CONNECTOR_ID,
-  SUB_ACTION as BEDROCK_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/bedrock/constants';
-import {
-  CROWDSTRIKE_CONNECTOR_ID,
-  SUB_ACTION as CROWDSTRIKE_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/crowdstrike/constants';
-import {
-  GEMINI_CONNECTOR_ID,
-  SUB_ACTION as GEMINI_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/gemini/constants';
-import {
-  INFERENCE_CONNECTOR_ID,
-  SUB_ACTION as INFERENCE_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/inference/constants';
-import {
-  MICROSOFT_DEFENDER_ENDPOINT_CONNECTOR_ID,
-  MICROSOFT_DEFENDER_ENDPOINT_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/microsoft_defender_endpoint/constants';
-import {
   CONNECTOR_ID as NOTION_CONNECTOR_ID,
   SUB_ACTION as NOTION_SUB_ACTION,
 } from '@kbn/stack-connectors-plugin/common/notion/constants';
-import {
-  OPENAI_CONNECTOR_ID,
-  SUB_ACTION as OPENAI_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/openai/constants';
-import {
-  SENTINELONE_CONNECTOR_ID,
-  SUB_ACTION as SENTINELONE_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/sentinelone/constants';
-import {
-  THEHIVE_CONNECTOR_ID,
-  SUB_ACTION as THEHIVE_SUB_ACTION,
-} from '@kbn/stack-connectors-plugin/common/thehive/constants';
 
 // Helper function to format sub-action names for display
 function formatSubActionName(action: string): string {
