@@ -17,15 +17,27 @@ export const GithubConfigSchema = z
 
   export const GithubSecretsSchema = z.object({ token: z.string().optional() }).strict();
 
-export const ListRepositoriesActionParamsSchema = z
-  .object({
-    type: z.enum(['all', 'owner', 'member']).optional().default('all'),
-    sort: z.enum(['created', 'updated', 'pushed', 'full_name']).optional().default('full_name'),
-    direction: z.enum(['asc', 'desc']).optional().default('asc'),
-    perPage: z.coerce.number().min(1).max(100).optional().default(30),
-    page: z.coerce.number().min(1).optional().default(1),
-  })
-  .strict();
+export const SearchIssuesActionParamsSchema = z.object({
+  owner: z.string(),
+  repo: z.string(),
+  state: z.enum(['open', 'closed', 'all']).optional().default('open'),
+  query: z.string().optional(),
+}).strict();
+
+export const GitHubIssueSchema = z.object({
+  id: z.number(),
+  number: z.number(),
+  title: z.string(),
+  body: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  closed_at: z.string().nullable(),
+});
+
+export const SearchIssuesActionResponseSchema = z.object({
+  issues: z.array(GitHubIssueSchema),
+  total_count: z.number(),
+}).strict();
 
 export const GitHubRepositorySchema = z.object({
   id: z.number(),

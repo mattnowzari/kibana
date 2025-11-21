@@ -9,17 +9,18 @@ import type { ServiceParams } from '@kbn/actions-plugin/server';
 import { SubActionConnector } from '@kbn/actions-plugin/server';
 import type { ConnectorUsageCollector } from '@kbn/actions-plugin/server/types';
 import type { AxiosError } from 'axios';
+import { z } from '@kbn/zod';
 import { SUB_ACTION } from '../../../common/github/constants';
 import {
-  ListRepositoriesActionParamsSchema,
-  ListRepositoriesActionResponseSchema,
+  SearchIssuesActionParamsSchema,
+  SearchIssuesActionResponseSchema,
+  GitHubIssueSchema,
 } from '../../../common/github/schema';
 import type {
   Config,
   Secrets,
-  ListRepositoriesActionParams,
-  ListRepositoriesActionResponse,
-  GitHubRepository,
+  SearchIssuesActionParams,
+  SearchIssuesActionResponse,
 } from '../../../common/github/types';
 
 export class GitHubConnector extends SubActionConnector<Config, Secrets> {
@@ -34,9 +35,9 @@ export class GitHubConnector extends SubActionConnector<Config, Secrets> {
 
   private registerSubActions() {
     this.registerSubAction({
-      name: SUB_ACTION.LIST_REPOSITORIES,
-      method: 'listRepositories',
-      schema: ListRepositoriesActionParamsSchema,
+      name: SUB_ACTION.SEARCH_ISSUES,
+      method: 'searchIssues',
+      schema: SearchIssuesActionParamsSchema,
     });
   }
 
@@ -60,46 +61,48 @@ export class GitHubConnector extends SubActionConnector<Config, Secrets> {
   }
 
   /**
-   * Lists repositories for the authenticated user
-   * @param params Parameters for listing repositories
+   * Searches for issues in a GitHub repository
+   * @param params Parameters for searching issues
    * @param connectorUsageCollector Usage collector for tracking
-   * @returns List of repositories
+   * @returns List of issues
    */
-  public async listRepositories(
+  public async searchIssues(
     {
-      type = 'all',
-      sort = 'full_name',
-      direction = 'asc',
-      perPage = 30,
-      page = 1,
-    }: ListRepositoriesActionParams,
+      owner,
+      repo,
+      state,
+      query,
+    }: SearchIssuesActionParams,
     connectorUsageCollector: ConnectorUsageCollector
-  ): Promise<ListRepositoriesActionResponse> {
-    const response = await this.request<GitHubRepository[]>(
+  ): Promise<SearchIssuesActionResponse> {
+    // GitHub API returns an array directly, so we validate it as an array first
+    // then transform it to match our response schema
+    const arrayResponseSchema = z.array(GitHubIssueSchema);
+    const response = await this.request<z.infer<typeof arrayResponseSchema>>(
       {
-        url: `${this.apiUrl}/user/repos`,
+        url: `${this.apiUrl}/search/issues`, // Note the /search/issues change
         method: 'get',
         params: {
-          type,
-          sort,
-          direction,
-          per_page: perPage,
-          page,
+          q: `repo:${owner}/${repo} ${query} is:issue`, // Proper search query format
+          state, // This might not be applicable in the search endpoint
         },
         headers: {
-          'Notion-Version': '2025-09-03',
           Authorization: `Bearer ${this.secrets.token}`,
         },
-        responseSchema: ListRepositoriesActionResponseSchema,
+        responseSchema: arrayResponseSchema,
       },
       connectorUsageCollector
     );
 
-    const repositories = Array.isArray(response.data) ? response.data : [];
-    return {
-      repositories,
-      total_count: repositories.length,
+    // Transform the array response to match our response schema
+    const issues = response.data;
+    const transformedResponse: SearchIssuesActionResponse = {
+      issues,
+      total_count: issues.length,
     };
+
+    // Validate the transformed response
+    return SearchIssuesActionResponseSchema.parse(transformedResponse);
   }
 }
 

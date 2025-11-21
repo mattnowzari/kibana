@@ -5,43 +5,48 @@
  * 2.0.
  */
 
-/**
- * Creates a workflow template for GitHub
- * @param connectorId - The ID of the GitHub connector
- * @param feature - Optional capability/feature (e.g., 'list_repositories')
- * @returns Workflow YAML template with connector reference
- */
-export function createGitHubWorkflowTemplate(connectorId: string, feature?: string): string {
-  const workflowName = feature ? `github.${feature}` : 'github';
+function generateGithubSearchIssuesWorkflow(stackConnectorId: string): string {
   return `version: '1'
-name: '${workflowName}'
-description: 'List GitHub repositories'
+name: 'Github search issues'
+description: 'Search for issues in a GitHub repository'
 enabled: true
 triggers:
   - type: 'manual'
 inputs:
-  - name: type
+  - name: owner
     type: string
-    description: Repository type filter (all, owner, member)
-    default: 'all'
-  - name: sort
+  - name: repo
     type: string
-    description: Sort field (created, updated, pushed, full_name)
-    default: 'full_name'
-  - name: direction
+  - name: state
+    type: choice
+    options:
+      - "open"
+      - "closed"
+      - "all"
+    default: "open"
+  - name: query
     type: string
-    description: Sort direction (asc, desc)
-    default: 'asc'
 steps:
-  - name: 'List Repositories'
-    type: '.github.listRepositories'
-    connector-id: '${connectorId}'
+  - name: search-issues
+    type: github.searchIssues
+    connector-id: ${stackConnectorId}
     with:
-      type: '{{ inputs.type }}'
-      sort: '{{ inputs.sort }}'
-      direction: '{{ inputs.direction }}'
-      perPage: 30
-      page: 1
+      owner: "\${{inputs.owner}}"
+      repo: "\${{inputs.repo}}"
+      state: "\${{inputs.state}}"
+      query: "\${{inputs.query}}"
 `;
 }
 
+/**
+ * Creates a workflow template for GitHub
+ * @param stackConnectorId - The ID of the stack connector connected via OAuth
+ * @returns Workflow YAML template with secret reference
+ */
+export function createGithubSearchWorkflowTemplates(
+  stackConnectorId: string,
+): string[] {
+  return [
+    generateGithubSearchIssuesWorkflow(stackConnectorId)
+  ];
+}

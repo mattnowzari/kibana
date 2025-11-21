@@ -158,6 +158,8 @@ import {
   // GitHub connector schemas
   GitHubListRepositoriesActionParamsSchema,
   GitHubListRepositoriesActionResponseSchema,
+  GitHubSearchIssuesActionParamsSchema,
+  GitHubSearchIssuesActionResponseSchema,
 } from './stack_connectors_schema';
 
 /**
@@ -402,6 +404,8 @@ function getSubActionParamsSchema(actionTypeId: string, subActionName: string): 
     switch (subActionName) {
       case 'listRepositories':
         return GitHubListRepositoriesActionParamsSchema;
+      case 'searchIssues':
+        return GitHubSearchIssuesActionParamsSchema;
     }
   }
 
@@ -653,6 +657,8 @@ function getSubActionOutputSchema(actionTypeId: string, subActionName: string): 
     switch (subActionName) {
       case 'listRepositories':
         return GitHubListRepositoriesActionResponseSchema;
+      case 'searchIssues':
+        return GitHubSearchIssuesActionResponseSchema;
     }
   }
 

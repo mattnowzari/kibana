@@ -42,3 +42,27 @@ export const GitHubListRepositoriesActionResponseSchema = z.object({
   total_count: z.number().optional(),
 });
 
+// GitHub searchIssues sub-action parameter schema
+export const GitHubSearchIssuesActionParamsSchema = z.object({
+  owner: z.string(),
+  repo: z.string(),
+  state: z.enum(['open', 'closed', 'all']).optional().default('open'),
+  query: z.string().optional(),
+});
+
+// GitHub searchIssues sub-action response schema
+export const GitHubSearchIssuesActionResponseSchema = z.object({
+  issues: z.array(
+    z.object({
+      id: z.number(),
+      number: z.number(),
+      title: z.string(),
+      body: z.string(),
+      created_at: z.string(),
+      updated_at: z.string(),
+      closed_at: z.string().nullable(),
+    })
+  ),
+  total_count: z.number(),
+});
+

@@ -210,4 +210,6 @@ export {
 export {
   GitHubListRepositoriesActionParamsSchema,
   GitHubListRepositoriesActionResponseSchema,
+  GitHubSearchIssuesActionParamsSchema,
+  GitHubSearchIssuesActionResponseSchema,
 } from './github';

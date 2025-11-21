@@ -9,17 +9,14 @@ import { z } from '@kbn/zod';
 import {
   GithubConfigSchema,
   GithubSecretsSchema,
-  ListRepositoriesActionParamsSchema,
-  ListRepositoriesActionResponseSchema,
   GitHubRepositorySchema,
+  SearchIssuesActionParamsSchema,
+  SearchIssuesActionResponseSchema,
 } from './schema';
 
 export type Config = z.infer<typeof GithubConfigSchema>;
 export type Secrets = z.infer<typeof GithubSecretsSchema>;
-export type ListRepositoriesActionParams = z.infer<typeof ListRepositoriesActionParamsSchema>;
-export type ListRepositoriesActionResponse = {
-  repositories: GitHubRepository[];
-  total_count?: number;
-};
+export type SearchIssuesActionParams = z.infer<typeof SearchIssuesActionParamsSchema>;
+export type SearchIssuesActionResponse = z.infer<typeof SearchIssuesActionResponseSchema>;
 export type GitHubRepository = z.infer<typeof GitHubRepositorySchema>;
 
