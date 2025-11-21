@@ -5,15 +5,313 @@
  * 2.0.
  */
 
-import { EuiText, useEuiTheme } from '@elastic/eui';
+import {
+  EuiButton,
+  EuiCard,
+  EuiConfirmModal,
+  EuiContextMenuItem,
+  EuiContextMenuPanel,
+  EuiFieldSearch,
+  EuiFilterButton,
+  EuiFilterGroup,
+  EuiFlexGrid,
+  EuiFlexGroup,
+  EuiFlexItem,
+  EuiPopover,
+  EuiSpacer,
+  EuiText,
+  useEuiTheme,
+  useGeneratedHtmlId,
+} from '@elastic/eui';
 import { css } from '@emotion/react';
 import { i18n } from '@kbn/i18n';
+import { useKibana } from '@kbn/kibana-react-plugin/public';
 import { KibanaPageTemplate } from '@kbn/shared-ux-page-kibana-template';
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { DATA_CONNECTORS_FULL_TITLE } from '../../common/constants';
+import { ConnectorFlyout } from '../components/connector_flyout';
+import { useConnectors } from '../hooks/use_connectors';
+
+/**
+ * Generate icon path using naming pattern: connector_{type}.png
+ * Converts connector types like 'brave_search' to '/plugins/dataConnectors/assets/connector_brave_search.png'
+ *
+ * @param connectorType - The connector type identifier (e.g., 'brave_search', 'slack', 'google_drive')
+ * @returns The full path to the connector icon PNG file
+ */
+export const getConnectorIconPath = (connectorType: string): string => {
+  const iconName = `connector_${connectorType}.png`;
+  return `/plugins/dataConnectors/assets/${iconName}`;
+};
+
+interface ConnectorTileData {
+  connectorType: string;
+  title: string;
+  description: string;
+  defaultFeatures: string[];
+  flyoutComponentId?: string; // Identifier for the flyout component
+  customFlyoutComponentId?: string; // Identifier for custom flyout component
+  saveConfig?: {
+    secretsMapping?: Record<string, string>; // Maps input field names to secret field names
+    config?: Record<string, any>; // Static config values
+    featuresField?: string; // Field name in input data that contains features array
+  };
+  oauthConfig?: {
+    provider: string;
+    scopes: string[];
+    initiatePath: string;
+    fetchSecretsPath: string;
+    oauthBaseUrl?: string;
+  };
+}
+
+// Component registry - maps component IDs to actual React components
+interface StandardFlyoutProps {
+  connectorType: string;
+  connectorName: string;
+  defaultFeatures?: string[];
+  oauthConfig?: {
+    provider: string;
+    scopes: string[];
+    initiatePath: string;
+    fetchSecretsPath: string;
+    oauthBaseUrl?: string;
+  };
+  onClose: () => void;
+  onSave?: (data: any) => Promise<void>;
+  onConnectionSuccess?: () => void;
+  isEditing?: boolean;
+}
+
+const FLYOUT_COMPONENT_REGISTRY: Record<string, React.ComponentType<StandardFlyoutProps>> = {
+  connector_flyout: ConnectorFlyout,
+};
 
 export const DataConnectorsLandingPage = () => {
+  const { services } = useKibana();
+  const httpClient = services.http;
+
+  const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
+  const [selectedConnectorType, setSelectedConnectorType] = useState<string | null>(null);
+  const [connectorTilesData, setConnectorTilesData] = useState<ConnectorTileData[]>([]);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+
   const { euiTheme } = useEuiTheme();
+  const {
+    isLoading,
+    createConnector,
+    deleteConnector,
+    deleteAllConnectors,
+    isConnected,
+    connectors,
+    refreshConnectors,
+  } = useConnectors(httpClient);
+
+  // Fetch connector configuration from API
+  React.useEffect(() => {
+    const fetchConnectorConfig = async () => {
+      if (!httpClient) {
+        setIsLoadingConfig(false);
+        return;
+      }
+
+      try {
+        const response = await httpClient.get<{ connectors: ConnectorTileData[] }>(
+          '/api/workplace_connectors/config'
+        );
+        setConnectorTilesData(response.connectors || []);
+      } catch (error) {
+        // Fallback to empty array on error
+        setConnectorTilesData([]);
+      } finally {
+        setIsLoadingConfig(false);
+      }
+    };
+
+    fetchConnectorConfig();
+  }, [httpClient]);
+
+  // Create a map of connector types to their connector instances
+  const connectorsByType = useMemo(() => {
+    const map = new Map<string, (typeof connectors)[0]>();
+    connectors.forEach((connector) => {
+      map.set(connector.type, connector);
+    });
+    return map;
+  }, [connectors]);
+
+  // Create a map of connector types to menu open states
+  const [menuOpenStates, setMenuOpenStates] = useState<Record<string, boolean>>({});
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [connectorToDelete, setConnectorToDelete] = useState<string | null>(null);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+
+  const handleSelectConnector = (connectorType: string) => {
+    setSelectedConnectorType(connectorType);
+    setIsFlyoutOpen(true);
+  };
+
+  const handleSaveConnector = async (tileData: ConnectorTileData, data: any) => {
+    if (!selectedConnectorType) return;
+
+    const saveConfig = tileData.saveConfig;
+    if (!saveConfig) return;
+
+    // Build secrets from mapping
+    const secrets: Record<string, any> = {};
+    if (saveConfig.secretsMapping) {
+      Object.entries(saveConfig.secretsMapping).forEach(([inputField, secretField]) => {
+        if (data[inputField] !== undefined) {
+          secrets[secretField] = data[inputField];
+        }
+      });
+    }
+
+    // Get features from data or use defaults
+    const features =
+      saveConfig.featuresField && data[saveConfig.featuresField]?.length
+        ? data[saveConfig.featuresField]
+        : tileData.defaultFeatures;
+
+    const connectorData = {
+      name: tileData.title,
+      type: selectedConnectorType,
+      secrets,
+      config: saveConfig.config || {},
+      features,
+    };
+
+    await createConnector(connectorData);
+    // Explicitly refresh connectors to ensure state is updated
+    await refreshConnectors();
+    handleCloseFlyout();
+  };
+
+  const handleCloseFlyout = () => {
+    setIsFlyoutOpen(false);
+    setSelectedConnectorType(null);
+  };
+
+  const toggleMenu = (connectorType: string) => {
+    setMenuOpenStates((prev) => ({
+      ...prev,
+      [connectorType]: !prev[connectorType],
+    }));
+  };
+
+  const closeMenu = (connectorType: string) => {
+    setMenuOpenStates((prev) => ({
+      ...prev,
+      [connectorType]: false,
+    }));
+  };
+
+  const onConfigure = (connectorType: string) => {
+    setSelectedConnectorType(connectorType);
+    setIsFlyoutOpen(true);
+    closeMenu(connectorType);
+  };
+
+  const onDelete = (connectorId: string | undefined, connectorType: string) => {
+    setConnectorToDelete(connectorId || null);
+    setShowDeleteModal(true);
+    closeMenu(connectorType);
+  };
+
+  const renderConnectorTile = (tileData: ConnectorTileData) => {
+    const connector = connectorsByType.get(tileData.connectorType);
+    const connectorId = connector?.id;
+    const connected = isConnected(tileData.connectorType);
+    const isMenuOpen = menuOpenStates[tileData.connectorType] || false;
+
+    return (
+      <EuiFlexItem key={tileData.connectorType}>
+        <div style={{ position: 'relative' }}>
+          <EuiCard
+            icon={
+              <img
+                src={getConnectorIconPath(tileData.connectorType)}
+                alt={`${tileData.title} logo`}
+                width={48}
+                height={48}
+              />
+            }
+            title={tileData.title}
+            description={tileData.description}
+            footer={
+              <EuiFlexGroup justifyContent="center" gutterSize="xs" responsive={false}>
+                {connected ? (
+                  <EuiFlexItem grow={false}>
+                    <EuiPopover
+                      button={
+                        <EuiButton
+                          size="s"
+                          iconType="arrowDown"
+                          iconSide="right"
+                          onClick={() => toggleMenu(tileData.connectorType)}
+                          color="success"
+                          fill
+                          style={{
+                            backgroundColor: '#008A5E',
+                            borderColor: '#008A5E',
+                            color: '#FFFFFF',
+                            opacity: 1,
+                          }}
+                        >
+                          Connected
+                        </EuiButton>
+                      }
+                      isOpen={isMenuOpen}
+                      closePopover={() => closeMenu(tileData.connectorType)}
+                      panelPaddingSize="none"
+                      anchorPosition="downLeft"
+                    >
+                      <EuiContextMenuPanel
+                        items={[
+                          <EuiContextMenuItem
+                            key="configure"
+                            icon="gear"
+                            onClick={() => onConfigure(tileData.connectorType)}
+                          >
+                            Configure
+                          </EuiContextMenuItem>,
+                          <EuiContextMenuItem
+                            key="delete"
+                            icon="trash"
+                            css={css`
+                              color: ${euiTheme.colors.textDanger};
+                            `}
+                            onClick={() => onDelete(connectorId, tileData.connectorType)}
+                          >
+                            <span className="euiTextColor-danger">Delete</span>
+                          </EuiContextMenuItem>,
+                        ]}
+                      />
+                    </EuiPopover>
+                  </EuiFlexItem>
+                ) : (
+                  <EuiFlexItem grow={false}>
+                    <EuiButton
+                      size="s"
+                      onClick={() => handleSelectConnector(tileData.connectorType)}
+                      isLoading={isLoading}
+                      color="primary"
+                      fill
+                    >
+                      Connect
+                    </EuiButton>
+                  </EuiFlexItem>
+                )}
+              </EuiFlexGroup>
+            }
+          />
+        </div>
+      </EuiFlexItem>
+    );
+  };
+
+  const modalTitleId = useGeneratedHtmlId();
+
   return (
     <KibanaPageTemplate>
       <KibanaPageTemplate.Header
@@ -21,6 +319,17 @@ export const DataConnectorsLandingPage = () => {
         css={css`
           background-color: ${euiTheme.colors.backgroundBasePlain};
         `}
+        rightSideItems={[
+          <EuiButton
+            key="delete-all"
+            color="danger"
+            iconType="trash"
+            onClick={() => setShowDeleteAllModal(true)}
+            isDisabled={connectors.length === 0 || isLoading}
+          >
+            Delete All Connections
+          </EuiButton>,
+        ]}
       >
         <EuiText>
           {i18n.translate('xpack.dataConnectors.landingPage.description', {
@@ -28,7 +337,121 @@ export const DataConnectorsLandingPage = () => {
           })}
         </EuiText>
       </KibanaPageTemplate.Header>
-      <KibanaPageTemplate.Section />
+      <KibanaPageTemplate.Section>
+        <EuiFlexGroup gutterSize="m" alignItems="center">
+          <EuiFlexItem>
+            <EuiFieldSearch fullWidth placeholder="Search" aria-label="Search connectors" />
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiFilterGroup>
+              <EuiFilterButton hasActiveFilters={false} numFilters={1} iconType="arrowDown">
+                Categories
+              </EuiFilterButton>
+            </EuiFilterGroup>
+          </EuiFlexItem>
+        </EuiFlexGroup>
+
+        <EuiSpacer size="xl" />
+
+        <EuiFlexGrid columns={4} gutterSize="m">
+          {isLoadingConfig ? (
+            <EuiFlexItem>
+              <EuiText>Loading connectors...</EuiText>
+            </EuiFlexItem>
+          ) : (
+            connectorTilesData.map((tileData) => renderConnectorTile(tileData))
+          )}
+        </EuiFlexGrid>
+      </KibanaPageTemplate.Section>
+
+      {isFlyoutOpen &&
+        selectedConnectorType &&
+        (() => {
+          const tileData = connectorTilesData.find(
+            (tile) => tile.connectorType === selectedConnectorType
+          );
+          if (!tileData) return null;
+
+          const connector = connectorsByType.get(selectedConnectorType);
+          const isEditing = Boolean(connector);
+
+          // Use unified flyout component for both API key and OAuth connectors
+          // The flyout automatically detects authentication method based on connector type
+          const Flyout = FLYOUT_COMPONENT_REGISTRY.connector_flyout;
+          if (Flyout) {
+            // Determine if this is an OAuth connector (has customFlyoutComponentId)
+            const isOAuthConnector = Boolean(tileData.customFlyoutComponentId);
+
+            return (
+              <Flyout
+                connectorType={selectedConnectorType}
+                connectorName={tileData.title}
+                defaultFeatures={tileData.defaultFeatures}
+                oauthConfig={tileData.oauthConfig}
+                onClose={handleCloseFlyout}
+                onSave={
+                  isOAuthConnector ? undefined : (data: any) => handleSaveConnector(tileData, data)
+                }
+                onConnectionSuccess={isOAuthConnector ? refreshConnectors : undefined}
+                isEditing={isEditing}
+              />
+            );
+          }
+
+          return null;
+        })()}
+
+      {showDeleteModal && (
+        <EuiConfirmModal
+          title="Delete connector?"
+          aria-labelledby={modalTitleId}
+          titleProps={{ id: modalTitleId }}
+          onCancel={() => {
+            setShowDeleteModal(false);
+            setConnectorToDelete(null);
+          }}
+          onConfirm={async () => {
+            if (connectorToDelete) {
+              await deleteConnector(connectorToDelete);
+              await refreshConnectors();
+            }
+            setShowDeleteModal(false);
+            setConnectorToDelete(null);
+          }}
+          cancelButtonText="Cancel"
+          confirmButtonText="Delete"
+          buttonColor="danger"
+        />
+      )}
+
+      {showDeleteAllModal && (
+        <EuiConfirmModal
+          title="Delete all connectors?"
+          aria-labelledby={modalTitleId}
+          titleProps={{ id: modalTitleId }}
+          onCancel={() => {
+            setShowDeleteAllModal(false);
+          }}
+          onConfirm={async () => {
+            try {
+              await deleteAllConnectors();
+              await refreshConnectors();
+            } catch (err) {
+              // Error is already handled in the hook
+            }
+            setShowDeleteAllModal(false);
+          }}
+          cancelButtonText="Cancel"
+          confirmButtonText="Delete All"
+          buttonColor="danger"
+        >
+          <p>
+            This will permanently delete all {connectors.length} connector
+            {connectors.length !== 1 ? 's' : ''} and their associated workflows. This action cannot
+            be undone.
+          </p>
+        </EuiConfirmModal>
+      )}
     </KibanaPageTemplate>
   );
 };

@@ -24,7 +24,6 @@ import { ExecutionStatus, WorkflowRepository } from '@kbn/workflows';
 import { WorkflowExecutionNotFoundError } from '@kbn/workflows/common/errors';
 
 import type { WorkflowsExecutionEngineConfig } from './config';
-
 import {
   checkAndSkipIfExistingScheduledExecution,
   resumeWorkflow,
@@ -40,8 +39,9 @@ import type {
   WorkflowsExecutionEnginePluginStart,
   WorkflowsExecutionEnginePluginStartDeps,
 } from './types';
-
 import { generateExecutionTaskScope } from './utils';
+import { SecretResolver } from './workflow_context_manager/secret_resolver';
+
 import type { ContextDependencies } from './workflow_context_manager/types';
 import type {
   ResumeWorkflowExecutionParams,
@@ -100,8 +100,17 @@ export class WorkflowsExecutionEnginePlugin
                 taskInstance.params as StartWorkflowExecutionParams;
               const [coreStart, pluginsStart] = await core.getStartServices();
               await this.initialize(coreStart);
-              const { actions, taskManager } = pluginsStart;
-              const dependencies: ContextDependencies = setupDependencies; // TODO: append start dependencies
+              const { actions, taskManager, encryptedSavedObjects } = pluginsStart;
+
+              // Create secret resolver if encrypted saved objects plugin is available
+              const secretResolver = encryptedSavedObjects
+                ? new SecretResolver(logger, encryptedSavedObjects)
+                : undefined;
+
+              const dependencies: ContextDependencies = {
+                ...setupDependencies,
+                secretResolver,
+              };
 
               // Get ES client from core services (guaranteed to be available at task execution time)
               const esClient = coreStart.elasticsearch.client.asInternalUser as Client;
@@ -147,8 +156,15 @@ export class WorkflowsExecutionEnginePlugin
                 taskInstance.params as ResumeWorkflowExecutionParams;
               const [coreStart, pluginsStart] = await core.getStartServices();
               await this.initialize(coreStart);
-              const dependencies: ContextDependencies = setupDependencies; // TODO: append start dependencies
-              const { actions, taskManager } = pluginsStart;
+              const { actions, taskManager, encryptedSavedObjects } = pluginsStart;
+              // Create secret resolver if encrypted saved objects plugin is available
+              const secretResolver = encryptedSavedObjects
+                ? new SecretResolver(logger, encryptedSavedObjects)
+                : undefined;
+              const dependencies: ContextDependencies = {
+                ...setupDependencies,
+                secretResolver,
+              };
               // Get ES client from core services (guaranteed to be available at task execution time)
               const unscopedEsClient = coreStart.elasticsearch.client.asInternalUser as Client;
               const workflowExecutionRepository = new WorkflowExecutionRepository(unscopedEsClient);
@@ -306,7 +322,15 @@ export class WorkflowsExecutionEnginePlugin
       throw new Error('Setup not called before start');
     }
 
-    const dependencies: ContextDependencies = this.setupDependencies;
+    // Create secret resolver if encrypted saved objects plugin is available
+    const secretResolver = plugins.encryptedSavedObjects
+      ? new SecretResolver(this.logger, plugins.encryptedSavedObjects)
+      : undefined;
+
+    const dependencies: ContextDependencies = {
+      ...this.setupDependencies,
+      secretResolver,
+    };
 
     const executeWorkflow = async (
       workflow: WorkflowExecutionEngineModel,

@@ -36,10 +36,14 @@ export const createIndexWithMappings = async ({
 
     logger?.debug(`Creating index ${indexName} with mappings`);
 
-    // Create the index with proper mappings
+    // Create the index with proper mappings and settings
+    // Disable date detection to prevent Elasticsearch from inferring date-like strings as dates
     await esClient.indices.create({
       index: indexName,
-      mappings,
+      mappings: {
+        ...mappings,
+        date_detection: false,
+      },
     });
 
     logger?.info(`Successfully created index ${indexName}`);

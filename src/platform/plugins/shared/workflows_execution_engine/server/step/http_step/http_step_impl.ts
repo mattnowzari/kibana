@@ -85,13 +85,20 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
       return this.handleFailure(input, error);
     }
   }
-
+// -------------------------------------------------------------
   private async executeHttpRequest(input?: any): Promise<RunStepResult> {
-    const { url, method, headers, body, fetcher: fetcherOptions } = input;
+    // Resolve secrets in input (e.g., ${workplace_connector:id:api_key})
+    const resolvedInput = await this.stepExecutionRuntime.contextManager.resolveSecretsInValue(input);
+    const { url, method, headers, body, fetcher: fetcherOptions } = resolvedInput;
+
+    const finalUrl: string = url;
+    const finalHeaders: HttpHeaders | undefined = headers;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const finalBody: any = body;
 
     // Validate that the URL is allowed based on the allowedHosts configuration
     try {
-      this.urlValidator.ensureUrlAllowed(url);
+      this.urlValidator.ensureUrlAllowed(finalUrl);
     } catch (error) {
       this.workflowLogger.logError(
         `HTTP request blocked: ${error.message}`,
@@ -105,6 +112,7 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
       throw error;
     }
 
+    // Log without exposing resolved secrets; use original URL with placeholders
     this.workflowLogger.logInfo(`Making HTTP ${method} request to ${url}`, {
       workflow: { step_id: this.step.name },
       event: { action: 'http_request', outcome: 'unknown' },
@@ -112,12 +120,15 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
     });
 
     const config: AxiosRequestConfig = {
-      url,
+      url: finalUrl,
       method,
-      headers,
+      headers: finalHeaders,
       signal: this.stepExecutionRuntime.abortController.signal,
-      ...(body && { data: body }),
     };
+
+    if (finalBody && ['POST', 'PUT', 'PATCH'].includes(method)) {
+      config.data = finalBody;
+    }
 
     // Apply fetcher options if provided
     if (fetcherOptions && Object.keys(fetcherOptions).length > 0) {
@@ -172,6 +183,8 @@ export class HttpStepImpl extends BaseAtomicNodeImplementation<HttpStep> {
       error: undefined,
     };
   }
+
+  // -------------------------------------------------------------
 
   protected async handleFailure(input: any, error: any): Promise<RunStepResult> {
     let errorMessage: string;

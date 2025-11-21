@@ -20,8 +20,11 @@ import type {
   ExitForeachNode,
   ExitNormalPathNode,
   ExitRetryNode,
+  GDriveGraphNode,
   GraphNodeUnion,
   HttpGraphNode,
+  RerankGraphNode,
+  SlackSearchNode,
   WorkflowGraph,
 } from '@kbn/workflows/graph';
 import {
@@ -32,8 +35,10 @@ import {
 } from '@kbn/workflows/graph';
 import { AtomicStepImpl } from './atomic_step/atomic_step_impl';
 import { ElasticsearchActionStepImpl } from './elasticsearch_action_step';
+import { GDriveStepImpl } from './gdrive_step';
 import { EnterForeachNodeImpl, ExitForeachNodeImpl } from './foreach_step';
 import { HttpStepImpl } from './http_step';
+
 import {
   EnterConditionBranchNodeImpl,
   EnterIfNodeImpl,
@@ -53,6 +58,8 @@ import {
   ExitTryBlockNodeImpl,
 } from './on_failure/fallback-step';
 import { EnterRetryNodeImpl, ExitRetryNodeImpl } from './on_failure/retry_step';
+import { RerankStepImpl } from './rerank_step';
+import { SlackSearchStepImpl } from './slack';
 import {
   EnterStepTimeoutZoneNodeImpl,
   EnterWorkflowTimeoutZoneNodeImpl,
@@ -216,6 +223,14 @@ export class NodesFactory {
           stepLogger
         );
       case 'atomic':
+        if (node.configuration.type == 'slack-search') {
+          return new SlackSearchStepImpl(
+            node as SlackSearchNode,
+            stepExecutionRuntime,
+            stepLogger,
+            this.workflowRuntime
+          );
+        }
         // Default atomic step (connector-based)
         return new AtomicStepImpl(
           node as AtomicGraphNode,
@@ -230,6 +245,20 @@ export class NodesFactory {
           stepExecutionRuntime,
           stepLogger,
           this.urlValidator,
+          this.workflowRuntime
+        );
+      case 'gdrive':
+        return new GDriveStepImpl(
+          node as GDriveGraphNode,
+          stepExecutionRuntime,
+          stepLogger,
+          this.workflowRuntime
+        );
+      case 'rerank':
+        return new RerankStepImpl(
+          node as RerankGraphNode,
+          stepExecutionRuntime,
+          this.workflowLogger,
           this.workflowRuntime
         );
       default:

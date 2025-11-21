@@ -128,6 +128,11 @@ import {
   // Torq connector schemas
   TorqParamsSchema,
   TorqResponseSchema,
+  // Notion connector schemas
+  NotionGetDataSourceActionParamsSchema,
+  NotionQueryDataSourceActionParamsSchema,
+  NotionGetPageActionParamsSchema,
+  NotionSearchActionParamsSchema,
 } from './stack_connectors_schema';
 
 /**
@@ -302,6 +307,20 @@ function getSubActionParamsSchema(actionTypeId: string, subActionName: string): 
         return TinesRunParamsSchema;
       case 'test':
         return TinesTestParamsSchema;
+    }
+  }
+
+  // Handle Notion sub-actions
+  if (actionTypeId === '.notion') {
+    switch (subActionName) {
+      case 'searchPageByTitle':
+        return NotionSearchActionParamsSchema;
+      case 'getPage':
+        return NotionGetPageActionParamsSchema;
+      case 'getDataSource':
+        return NotionGetDataSourceActionParamsSchema;
+      case 'queryDataSource':
+        return NotionQueryDataSourceActionParamsSchema;
     }
   }
 
@@ -545,6 +564,22 @@ function getSubActionOutputSchema(actionTypeId: string, subActionName: string): 
 
 // Static connectors used for schema generation
 const staticConnectors: ConnectorContractUnion[] = [
+  {
+    type: 'slack-search',
+    summary: 'Slack Search',
+    paramsSchema: z
+      .object({
+        bearerToken: z.string().min(1),
+        query: z.string().min(1),
+        searchType: z.enum(['messages', 'channels']).optional().default('messages'),
+        fields: z.string().optional(),
+      })
+      .required(),
+    outputSchema: z.string(),
+    description: i18n.translate('workflows.connectors.slack-search.description', {
+      defaultMessage: 'Slack Search',
+    }),
+  },
   {
     type: 'console',
     summary: 'Console',

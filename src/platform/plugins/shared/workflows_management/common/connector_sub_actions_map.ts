@@ -29,6 +29,10 @@ import {
   SUB_ACTION as JiraServiceManagementSubActions,
 } from '@kbn/connector-schemas/jira-service-management/constants';
 import {
+  CONNECTOR_ID as NOTION_CONNECTOR_ID,
+  SUB_ACTION as NOTION_SUB_ACTION,
+} from '@kbn/stack-connectors-plugin/common/notion/constants';
+import {
   CONNECTOR_ID as OPENAI_CONNECTOR_ID,
   SUB_ACTION as OPENAI_SUB_ACTION,
 } from '@kbn/connector-schemas/openai/constants';
@@ -116,6 +120,7 @@ function createSubActionsMapping() {
     { id: THEHIVE_CONNECTOR_ID, actions: THEHIVE_SUB_ACTION },
     { id: TINES_CONNECTOR_ID, actions: TINES_SUB_ACTION },
     { id: XSOAR_CONNECTOR_ID, actions: XSOAR_SUB_ACTION },
+    { id: NOTION_CONNECTOR_ID, actions: NOTION_SUB_ACTION },
     { id: D3_SECURITY_CONNECTOR_ID, actions: D3SECURITY_SUB_ACTION },
     { id: JIRA_SERVICE_MANAGEMENT_CONNECTOR_TYPE_ID, actions: JiraServiceManagementSubActions },
     { id: OpsgenieConnectorTypeId, actions: OpsgenieSubActions },

@@ -12,12 +12,14 @@ import type { ConnectorContractUnion } from '../..';
 import {
   BaseConnectorStepSchema,
   getForEachStepSchema,
+  getGDriveStepSchema,
   getHttpStepSchema,
   getIfStepSchema,
   getMergeStepSchema,
   getOnFailureStepSchema,
   getParallelStepSchema,
   getWorkflowSettingsSchema,
+  RerankStepSchema,
   WaitStepSchema,
   WorkflowSchema,
 } from '../schema';
@@ -49,6 +51,7 @@ function createRecursiveStepSchema(
     const parallelSchema = getParallelStepSchema(stepSchema, loose);
     const mergeSchema = getMergeStepSchema(stepSchema, loose);
     const httpSchema = getHttpStepSchema(stepSchema, loose);
+    const gdriveSchema = getGDriveStepSchema(stepSchema, loose);
 
     const connectorSchemas = connectors.map((c) =>
       generateStepSchemaForConnector(c, stepSchema, loose)
@@ -63,6 +66,8 @@ function createRecursiveStepSchema(
       mergeSchema,
       WaitStepSchema,
       httpSchema,
+      gdriveSchema,
+      RerankStepSchema,
       ...connectorSchemas,
     ]);
   });
