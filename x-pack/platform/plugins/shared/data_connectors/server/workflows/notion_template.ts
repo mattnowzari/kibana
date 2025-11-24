@@ -34,13 +34,16 @@ steps:
 function generateQueryWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion query data source'
-description: 'Given the ID of a data source, query information about its rows. By default fetching only pages of 10 rows. Use start_cursor or page_size to fetch more rows.'
+description: 'Given the ID of a data source, query information about its rows. By default it will fetch 10 items, unless you specify page_size or cursor. You can filter the results by specifying the \`filter\`, which is a string representation of the JSON that would be passed, as per documentation in https://developers.notion.com/reference/filter-data-source-entries'
 enabled: true
 triggers:
   - type: 'manual'
 inputs:
   - name: data_source_id
     type: string
+  - name: filter_by
+    type: string
+    required: false
   - name: page_size
     type: number
     required: false
@@ -56,6 +59,7 @@ steps:
       dataSourceId: "\${{inputs.data_source_id}}"
       pageSize: \${{inputs.page_size}}
       startCursor: "\${{inputs.start_cursor}}"
+      filter: "\${{inputs.filter_by}}"
 
 `;
 }
