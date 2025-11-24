@@ -148,9 +148,13 @@ export class NotionConnector extends SubActionConnector<NotionConfig, NotionSecr
     connectorUsageCollector: ConnectorUsageCollector
   ) {
     // https://developers.notion.com/reference/query-a-data-source
-    let requestData = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let requestData: Record<string, any> = {
+      page_size: params.pageSize,
+      start_cursor: params.startCursor,
+    };
     if (params.filter) {
-      requestData = { filter: params.filter };
+      requestData = { ...requestData, filter: params.filter };
     }
     const response = await this.request(
       {

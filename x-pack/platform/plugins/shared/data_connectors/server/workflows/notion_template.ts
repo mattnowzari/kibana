@@ -34,19 +34,28 @@ steps:
 function generateQueryWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion query data source'
-description: 'Given the ID of a data source, query information about its rows'
+description: 'Given the ID of a data source, query information about its rows. By default fetching only pages of 10 rows. Use start_cursor or page_size to fetch more rows.'
 enabled: true
 triggers:
   - type: 'manual'
 inputs:
   - name: data_source_id
     type: string
+  - name: page_size
+    type: number
+    required: false
+    default: 10
+  - name: start_cursor
+    type: string
+    required: false
 steps:
   - name: query-data-source
     type: notion.queryDataSource
     connector-id: ${stackConnectorId}
     with:
       dataSourceId: "\${{inputs.data_source_id}}"
+      pageSize: \${{inputs.page_size}}
+      startCursor: "\${{inputs.start_cursor}}"
 
 `;
 }
