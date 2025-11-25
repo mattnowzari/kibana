@@ -44,6 +44,17 @@ inputs:
   - name: filter_by
     type: string
     required: false
+    - name: filter_by
+    type: string
+    required: false
+    description: |
+      A JSON string (not an object) that filters Notion data source entries. Must be valid JSON following the Notion API filter format: https://developers.notion.com/reference/filter-data-source-entries
+        Structure: Each filter targets a property by name with a condition object matching the property type (e.g., checkbox, rich_text, select, number, date). Use and/or arrays to combine conditions.
+        Examples:
+          Checkbox: "{"property": "Done", "checkbox": {"equals": true}}"
+          Text contains: "{"property": "Name", "rich_text": {"contains": "term"}}"
+          Combined: "{"and": [{"property": "Status", "select": {"equals": "Active"}}, {"property": "Priority", "number": {"greater_than": 5}}]}"
+          Note: Property names must match the data source exactly. The condition key (e.g., checkbox, rich_text) must match the property type. Serialize the JSON object as a string.
   - name: page_size
     type: number
     required: false

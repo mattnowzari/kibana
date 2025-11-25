@@ -25,7 +25,27 @@ triggers:
   - type: 'manual'
 inputs:
   - name: query
-    description: Search query to find files in Google Drive
+    description: |
+      Query string for Google Drive Files API search (https://www.googleapis.com/drive/v3/files).
+
+      REQUIRED FORMAT: query_term operator values
+
+      Valid operators: =, !=, contains, in, and, or, not
+
+      Common query terms:
+      - name: filename search (e.g., name = 'report.pdf')
+      - fullText: search file contents (e.g., fullText contains 'keyword')
+      - mimeType: filter by type (e.g., mimeType = 'application/pdf')
+      - modifiedTime: date filter (e.g., modifiedTime > '2024-01-01T00:00:00')
+      - trashed: include/exclude deleted (trashed = false)
+      - parents: folder search (e.g., '1234567' in parents)
+
+      Examples:
+      - fullText contains 'Wix'
+      - name = 'report' and trashed = false
+      - mimeType = 'application/pdf' and fullText contains 'invoice'
+
+      Note: Escape special characters in strings with backslash. No bare quotes or invalid operators.
     type: string
 steps:
   - name: 'search-files'
