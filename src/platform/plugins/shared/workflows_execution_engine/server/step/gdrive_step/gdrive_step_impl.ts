@@ -234,20 +234,7 @@ export class GDriveStepImpl extends BaseAtomicNodeImplementation<GDriveStep> {
     };
   }
 
-  /**
-   * Performs paginated search with a given query and returns all matching files.
-   * @param query - The Google Drive API query string
-   * @param limit - Optional limit on number of results
-   * @param logContext - Optional context for logging (e.g., "OR operator" for fallback)
-   * @param logTags - Optional additional tags for logging
-   * @returns Object containing files, count, pages, and incompleteSearch flag
-   */
-  private async performPaginatedSearch(
-    query: string,
-    limit?: number,
-    logContext?: string,
-    logTags: string[] = []
-  ): Promise<{ files: FileMetadata[]; pages: number; incompleteSearch: boolean }> {
+  private async handleSearch(query?: string, limit?: number): Promise<ListFilesOutput> {
     if (!this.driveClient) {
       throw new Error('Google Drive client not initialized');
     }
@@ -257,24 +244,22 @@ export class GDriveStepImpl extends BaseAtomicNodeImplementation<GDriveStep> {
     let resultCount = 0;
     let pageCount = 0;
     let incompleteSearch = false;
-    const baseTags = ['gdrive', 'list', 'pagination', ...logTags];
 
     do {
       const options: ListFilesOptions = {
-        q: this.normalizeQuery(query),
+        q: query,
         pageSize: 100,
         pageToken,
       };
 
-      const contextSuffix = logContext ? ` ${logContext}` : '';
       this.workflowLogger.logInfo(
-        `Fetching Google Drive files page ${pageCount + 1}${contextSuffix}${
+        `Fetching Google Drive files page ${pageCount + 1}${
           pageToken ? ` (continuing from previous page)` : ''
         }`,
         {
           workflow: { step_id: this.step.name },
           event: { action: 'gdrive_list_pagination', outcome: 'unknown' },
-          tags: baseTags,
+          tags: ['gdrive', 'list', 'pagination'],
         }
       );
 
@@ -300,73 +285,17 @@ export class GDriveStepImpl extends BaseAtomicNodeImplementation<GDriveStep> {
           {
             workflow: { step_id: this.step.name },
             event: { action: 'gdrive_list_pagination', outcome: 'success' },
-            tags: baseTags,
+            tags: ['gdrive', 'list', 'pagination'],
           }
         );
       }
     } while (pageToken);
 
-    return {
-      files: allFiles,
-      pages: pageCount,
-      incompleteSearch,
-    };
-  }
-
-  private async handleSearch(query?: string, limit?: number, fallbackToOrQuery: boolean = false): Promise<ListFilesOutput> {
-    if (!this.driveClient) {
-      throw new Error('Google Drive client not initialized');
-    }
-
-    if (!query) {
-      throw new Error('query is required for search operation');
-    }
-
-    // Check if the original query is already a valid Google Drive query
-    const isOriginalQueryValid = this.isLikelyValidGDriveQuery(query);
-
-    // Normalize the query - convert plain text to valid Google Drive query if needed
-    let normalizedQuery = this.normalizeQuery(query, false);
-
-    // Perform initial search with AND operator (or original query if it was already valid)
-    let searchResult = await this.performPaginatedSearch(normalizedQuery, limit);
-
-    // If we got 0 results and the query was normalized (not a valid GDrive query),
-    // retry with OR operator as a fallback
-    if (searchResult.files.length === 0 && !isOriginalQueryValid && normalizedQuery !== query && fallbackToOrQuery) {
-      this.workflowLogger.logInfo(
-        `No results found with AND operator, retrying with OR operator: "${query}"`,
-        {
-          workflow: { step_id: this.step.name },
-          event: { action: 'gdrive_query_fallback', outcome: 'unknown' },
-          tags: ['gdrive', 'search', 'query', 'fallback'],
-        }
-      );
-
-      // Retry with OR operator
-      normalizedQuery = this.normalizeQuery(query, true);
-      searchResult = await this.performPaginatedSearch(normalizedQuery, limit, '(OR operator)', [
-        'or_fallback',
-      ]);
-
-      this.workflowLogger.logInfo(
-        `OR operator fallback completed: found ${searchResult.files.length} files`,
-        {
-          workflow: { step_id: this.step.name },
-          event: { action: 'gdrive_query_fallback', outcome: 'success' },
-          tags: ['gdrive', 'search', 'query', 'fallback'],
-        }
-      );
-    }
-
     // Trim results to the specified limit
-    const limitedFiles =
-      limit && searchResult.files.length > limit
-        ? searchResult.files.slice(0, limit)
-        : searchResult.files;
+    const limitedFiles = limit && allFiles.length > limit ? allFiles.slice(0, limit) : allFiles;
 
     this.workflowLogger.logInfo(
-      `Completed fetching all Google Drive files: ${limitedFiles.length} files across ${searchResult.pages} page(s)`,
+      `Completed fetching all Google Drive files: ${limitedFiles.length} files across ${pageCount} page(s)`,
       {
         workflow: { step_id: this.step.name },
         event: { action: 'gdrive_list_complete', outcome: 'success' },
@@ -377,41 +306,9 @@ export class GDriveStepImpl extends BaseAtomicNodeImplementation<GDriveStep> {
     return {
       files: limitedFiles,
       count: limitedFiles.length,
-      pages: searchResult.pages,
-      incompleteSearch: searchResult.incompleteSearch,
+      pages: pageCount,
+      incompleteSearch,
     };
-  }
-
-  /**
-   * Normalizes a query string. If it's not a valid Google Drive API query,
-   * treats it as plain text and searches both name and fullText fields to match
-   * the behavior of Google Drive web search. For multi-word queries, searches
-   * for each term in both fields to better match web search behavior.
-   */
-  private normalizeQuery(query: string, useOrOperator: boolean = false): string {
-    if (this.isLikelyValidGDriveQuery(query)) {
-      return query;
-    }
-
-    // Split query into individual terms (words) and create queries for each
-    const termQueries = query
-      .trim()
-      .split(/\s+/)
-      .filter((term) => term.length > 0)
-      .map((term) => term.replace(/'/g, "\\'"))
-      .map((term) => `(name contains '${term}' or fullText contains '${term}')`);
-
-    // Combine all term queries with AND to require all terms match
-    return termQueries.join(useOrOperator ? ' or ' : ' and ');
-  }
-
-  /**
-   * Detects if a query string is likely a valid Google Drive API query.
-   * Checks for common Google Drive API patterns like operators, field names, or boolean operators.
-   */
-  private isLikelyValidGDriveQuery(query: string): boolean {
-    // Check for common Google Drive API indicators using a single regex
-    return /contains|=|in\s+parents|name\s|mimetype|fulltext|\s+and\s+|\s+or\s+/i.test(query);
   }
 
   private async handleList(folderId?: string, limit?: number): Promise<ListFilesOutput> {
