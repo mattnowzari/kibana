@@ -390,6 +390,94 @@ export function registerConnectorRoutes(
     }
   );
 
+  // Connect GitHub connector with Personal Access Token
+  router.post(
+    {
+      path: '/api/workplace_connectors/github/connect-with-token',
+      validate: {
+        body: schema.object({
+          token: schema.string(),
+        }),
+      },
+      security: {
+        authz: {
+          enabled: false,
+          reason: 'This route is opted out from authorization',
+        },
+      },
+    },
+    async (context, request, response) => {
+      const coreContext = await context.core;
+      const { token } = request.body as { token: string };
+
+      try {
+        const savedObjectsClient = coreContext.savedObjects.client;
+        const connectorType = 'github';
+        const connectorConfig = CONNECTOR_CONFIG[connectorType];
+
+        if (!connectorConfig) {
+          return response.customError({
+            statusCode: 400,
+            body: {
+              message: `Connector type ${connectorType} not found`,
+            },
+          });
+        }
+
+        // Create connector with PAT
+        const savedObject = await createOAuthConnector(connectorType, savedObjectsClient);
+        const connectorId = savedObject.id;
+
+        // Update connector with token (formatted as access_token to match OAuth flow)
+        await savedObjectsClient.update(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connectorId, {
+          secrets: {
+            accessToken: token,
+            refreshToken: '',
+            expiresIn: '0', // PATs don't expire unless revoked
+          },
+          config: {
+            status: 'connected',
+            authMethod: 'pat',
+          },
+          updatedAt: new Date().toISOString(),
+        });
+
+        // Create workflows for the connector
+        const features = connectorConfig.defaultFeatures;
+        await createWorkflowsForConnector(
+          connectorId,
+          connectorType,
+          features,
+          savedObjectsClient,
+          workflowCreator,
+          request,
+          logger,
+          false, // forceCreate
+          { access_token: token } // Pass token as access_token for stack connector creation
+        );
+
+        // Fetch the updated connector to return full response
+        const updatedConnector: SavedObject<WorkplaceConnectorAttributes> =
+          await savedObjectsClient.get(WORKPLACE_CONNECTOR_SAVED_OBJECT_TYPE, connectorId);
+        const responseData = buildConnectorResponse(updatedConnector);
+
+        logger.info(`Created GitHub connector ${connectorId} with Personal Access Token`);
+
+        return response.ok({
+          body: responseData,
+        });
+      } catch (error) {
+        logger.error(`Failed to create GitHub connector with PAT: ${(error as Error).message}`);
+        return response.customError({
+          statusCode: 500,
+          body: {
+            message: `Failed to create connector: ${(error as Error).message}`,
+          },
+        });
+      }
+    }
+  );
+
   // Handle OAuth callback - fetches secrets and updates connector
   router.get(
     {

@@ -200,7 +200,7 @@ export class GitHubConnector extends SubActionConnector<Config, Secrets> {
         url: `${this.apiUrl}/repos/${owner}/${repo}/commits/${ref}`,
         method: 'get',
         headers: {
-          // Authorization: `Bearer ${this.secrets.token}`,
+          Authorization: `Bearer ${this.secrets.token}`,
           Accept: 'application/vnd.github.v3+json',
         },
         responseSchema: z.object({ sha: z.string() }).passthrough(),
@@ -232,7 +232,7 @@ export class GitHubConnector extends SubActionConnector<Config, Secrets> {
         method: 'get',
         params: { recursive: '1' },
         headers: {
-          // Authorization: `Bearer ${this.secrets.token}`,
+          Authorization: `Bearer ${this.secrets.token}`,
           Accept: 'application/vnd.github.v3+json',
         },
         responseSchema: treeResponseSchema,
@@ -275,8 +275,7 @@ export class GitHubConnector extends SubActionConnector<Config, Secrets> {
             method: 'get',
             params: { ref },
             headers: {
-              // Gets a 403 when trying to use this token for a public repo and the Github OAuth app doesn't have access from elastic.
-              // Authorization: `Bearer ${this.secrets.token}`,
+              Authorization: `Bearer ${this.secrets.token}`,
               Accept: 'application/vnd.github.v3+json'
             },
             responseSchema: apiResponseSchema,
@@ -284,12 +283,14 @@ export class GitHubConnector extends SubActionConnector<Config, Secrets> {
           connectorUsageCollector
         );
 
-        // Decode base64 content to UTF-8 string
-        const decodedContent = Buffer.from(response.data.content, 'base64').toString('utf-8');
+        // Decode base64 content to UTF-8 string and trim whitespace
+        const decodedContent = Buffer.from(response.data.content, 'base64').toString('utf-8').trim();
 
         return {
-          ...response.data,
+          name: response.data.name,
+          path: response.data.path,
           content: decodedContent,
+          html_url: response.data.html_url,
         };
       })
     );

@@ -82,16 +82,14 @@ export const ConnectorFlyout: React.FC<ConnectorFlyoutProps> = ({
 
   // Determine if this connector uses OAuth authentication
   const isOAuth = Boolean(oauthConfig);
+  // GitHub supports both OAuth and Personal Access Token
+  const isGitHub = connectorType === 'github';
+  const showBothOptions = isGitHub && isOAuth;
 
   // Handle API key authentication
   const handleApiKeySave = async () => {
     if (!apiKey.trim()) {
-      setError('API Key is required');
-      return;
-    }
-
-    if (!onSave) {
-      setError('Save handler not provided');
+      setError(isGitHub ? 'Personal access token is required' : 'API Key is required');
       return;
     }
 
@@ -99,17 +97,44 @@ export const ConnectorFlyout: React.FC<ConnectorFlyoutProps> = ({
     setError(null);
 
     try {
-      await onSave({ apiKey: apiKey.trim(), features });
-      onClose();
+      if (isGitHub && httpClient) {
+        // For GitHub, use the PAT endpoint
+        await httpClient.post('/api/workplace_connectors/github/connect-with-token', {
+          body: JSON.stringify({
+            token: apiKey.trim(),
+          }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (onConnectionSuccess) {
+          await onConnectionSuccess();
+        }
+        onClose();
+      } else {
+        // For other connectors, use the regular save handler
+        if (!onSave) {
+          setError('Save handler not provided');
+          return;
+        }
+        await onSave({ apiKey: apiKey.trim(), features });
+        onClose();
+      }
     } catch (err) {
-      setError((err as Error).message || 'Failed to save connector');
+      setError((err as Error).message || (isGitHub ? 'Failed to create connector with Personal Access Token' : 'Failed to save connector'));
     } finally {
       setIsLoading(false);
     }
   };
 
   // Handle OAuth authentication
-  const handleOAuthConnect = async () => {
+  const handleOAuthConnect = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     if (!oauthConfig) {
       setError('OAuth configuration not found');
       return;
@@ -137,9 +162,9 @@ export const ConnectorFlyout: React.FC<ConnectorFlyoutProps> = ({
         body: JSON.stringify({ connectorId, regenerateWorkflows }),
       } as any);
 
-      const authUrl = response.authUrl;
-      const requestId = response.requestId;
-      const returnedConnectorId = response.connectorId;
+      const authUrl = (response as any).authUrl;
+      const requestId = (response as any).requestId;
+      const returnedConnectorId = (response as any).connectorId;
 
       const oauthWindow = window.open(authUrl, '_blank');
 
@@ -209,7 +234,117 @@ export const ConnectorFlyout: React.FC<ConnectorFlyoutProps> = ({
           </>
         )}
 
-        {isOAuth ? (
+        {showBothOptions ? (
+          // GitHub: Show both Personal Access Token and OAuth options
+          <>
+            <EuiForm fullWidth>
+              <EuiTitle size="xs">
+                <h3>Personal Access Token</h3>
+              </EuiTitle>
+              <EuiSpacer size="s" />
+              <EuiFormRow
+                label="Personal Access Token"
+                helpText={
+                  <>
+                    Enter your GitHub personal access token with repo scope. Create one at{' '}
+                    <a
+                      href="https://github.com/settings/tokens"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      https://github.com/settings/tokens
+                    </a>
+                  </>
+                }
+                isInvalid={!!error && !apiKey.trim()}
+                error={error && !apiKey.trim() ? ['Personal access token is required'] : []}
+                fullWidth
+              >
+                <EuiFieldPassword
+                  type="dual"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="ghp_..."
+                  isInvalid={!!error && !apiKey.trim()}
+                  fullWidth
+                />
+              </EuiFormRow>
+            </EuiForm>
+
+            <EuiSpacer size="m" />
+
+            <EuiButton
+              onClick={handleApiKeySave}
+              fill
+              isLoading={isLoading}
+              size="m"
+              fullWidth
+              type="button"
+            >
+              Connect with Personal Access Token
+            </EuiButton>
+
+            <EuiSpacer size="l" />
+
+            <EuiFlexGroup gutterSize="s" alignItems="center">
+              <EuiFlexItem grow={false}>
+                <div
+                  style={{
+                    height: '1px',
+                    backgroundColor: '#D3DAE6',
+                    flex: 1,
+                  }}
+                />
+              </EuiFlexItem>
+              <EuiFlexItem grow={false}>
+                <EuiText size="xs" color="subdued">
+                  OR
+                </EuiText>
+              </EuiFlexItem>
+              <EuiFlexItem grow={false}>
+                <div
+                  style={{
+                    height: '1px',
+                    backgroundColor: '#D3DAE6',
+                    flex: 1,
+                  }}
+                />
+              </EuiFlexItem>
+            </EuiFlexGroup>
+
+            <EuiSpacer size="l" />
+
+            <EuiText>
+              <p>{connectDescription}</p>
+            </EuiText>
+
+            <EuiSpacer size="m" />
+
+            <EuiButton
+              onClick={handleOAuthConnect}
+              fill
+              isLoading={isLoading}
+              iconType="logoGithub"
+              size="m"
+              fullWidth
+              type="button"
+            >
+              Connect with GitHub
+            </EuiButton>
+
+            {isEditing && (
+              <>
+                <EuiSpacer size="m" />
+                <EuiCheckbox
+                  id="regenerate-workflows"
+                  label="Regenerate workflows and tools"
+                  checked={regenerateWorkflows}
+                  onChange={(e) => setRegenerateWorkflows(e.target.checked)}
+                />
+              </>
+            )}
+          </>
+        ) : isOAuth ? (
           // OAuth authentication flow
           <>
             <EuiText>
@@ -236,17 +371,32 @@ export const ConnectorFlyout: React.FC<ConnectorFlyoutProps> = ({
             <EuiSpacer size="s" />
 
             <EuiFormRow
-              label="API Key"
-              helpText={`Enter your ${connectorName} API key`}
+              label={connectorType === 'github' ? 'Personal Access Token' : 'API Key'}
+              helpText={
+                connectorType === 'github' ? (
+                  <>
+                    Enter your GitHub personal access token with repo scope. Create one at{' '}
+                    <a
+                      href="https://github.com/settings/tokens"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      https://github.com/settings/tokens
+                    </a>
+                  </>
+                ) : (
+                  `Enter your ${connectorName} API key`
+                )
+              }
               isInvalid={!!error && !apiKey.trim()}
-              error={error && !apiKey.trim() ? ['API Key is required'] : []}
+              error={error && !apiKey.trim() ? [connectorType === 'github' ? 'Personal access token is required' : 'API Key is required'] : []}
               fullWidth
             >
               <EuiFieldPassword
                 type="dual"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter API key"
+                placeholder={connectorType === 'github' ? 'ghp_...' : 'Enter API key'}
                 isInvalid={!!error && !apiKey.trim()}
                 fullWidth
               />
@@ -293,17 +443,20 @@ export const ConnectorFlyout: React.FC<ConnectorFlyoutProps> = ({
               Cancel
             </EuiButtonEmpty>
           </EuiFlexItem>
-          <EuiFlexItem>
-            <EuiButton
-              onClick={isOAuth ? handleOAuthConnect : handleApiKeySave}
-              fill
-              isLoading={isLoading}
-              size="m"
-              fullWidth
-            >
-              {isOAuth ? 'Connect' : isEditing ? 'Save' : 'Connect'}
-            </EuiButton>
-          </EuiFlexItem>
+          {!showBothOptions && (
+            <EuiFlexItem>
+              <EuiButton
+                onClick={isOAuth ? handleOAuthConnect : handleApiKeySave}
+                fill
+                isLoading={isLoading}
+                size="m"
+                fullWidth
+                type="button"
+              >
+                {isOAuth ? 'Connect' : isEditing ? 'Save' : 'Connect'}
+              </EuiButton>
+            </EuiFlexItem>
+          )}
         </EuiFlexGroup>
       </EuiFlyoutFooter>
     </EuiFlyout>

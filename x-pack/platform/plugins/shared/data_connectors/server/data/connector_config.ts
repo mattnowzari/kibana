@@ -44,7 +44,7 @@ export const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
     name: 'Google Drive',
     description: 'Connect to Google Drive to search and access files using OAuth.',
     defaultFeatures: ['search', 'list', 'get', 'download'],
-    customFlyoutComponentId: 'google_drive_connector_flyout',
+    flyoutComponentId: 'connector_flyout',
     saveConfig: {
       secretsMapping: {},
       config: {},
@@ -96,9 +96,16 @@ export const CONNECTOR_CONFIG: Record<string, ConnectorConfig> = {
   },
   github: {
     name: 'GitHub',
-    description: 'Connect to GitHub to search repositories and access repository data using OAuth.',
+    description: 'Connect to GitHub to search repositories and access repository data.',
     defaultFeatures: ['list_repositories'],
-    customFlyoutComponentId: 'github_connector_flyout',
+    flyoutComponentId: 'connector_flyout',
+    saveConfig: {
+      secretsMapping: {
+        apiKey: 'token', // Maps input.apiKey to secrets.token
+      },
+      config: {},
+      featuresField: 'features',
+    },
     oauthConfig: {
       provider: 'github',
       scopes: ['repo', 'user', 'read:org'],

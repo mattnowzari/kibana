@@ -375,12 +375,13 @@ export const DataConnectorsLandingPage = () => {
           const connector = connectorsByType.get(selectedConnectorType);
           const isEditing = Boolean(connector);
 
-          // Use unified flyout component for both API key and OAuth connectors
-          // The flyout automatically detects authentication method based on connector type
-          const Flyout = FLYOUT_COMPONENT_REGISTRY.connector_flyout;
+          // Use custom flyout if specified, otherwise use default connector flyout
+          const flyoutComponentId = tileData.customFlyoutComponentId || tileData.flyoutComponentId || 'connector_flyout';
+          const Flyout = FLYOUT_COMPONENT_REGISTRY[flyoutComponentId];
+          
           if (Flyout) {
-            // Determine if this is an OAuth connector (has customFlyoutComponentId)
-            const isOAuthConnector = Boolean(tileData.customFlyoutComponentId);
+            // Determine if this is an OAuth connector (has oauthConfig)
+            const isOAuthConnector = Boolean(tileData.oauthConfig);
 
             return (
               <Flyout
