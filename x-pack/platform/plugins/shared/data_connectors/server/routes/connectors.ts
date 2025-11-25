@@ -799,7 +799,9 @@ export function registerConnectorRoutes(
 
       try {
         const savedObjectsClient = coreContext.savedObjects.client;
-        // Cascade delete related workflows/tools (best-effort)
+        // Cascade delete related workflows/tools/stack connectors (best-effort)
+        // This handles deletion for all connector types including Notion and GitHub
+        // which create Kibana stack connectors (KSCs) that need to be cleaned up
         const workflowIds: string[] = [];
         let toolIds: string[] = [];
         let kscIds: string[] = [];
@@ -815,7 +817,7 @@ export function registerConnectorRoutes(
           if (attrs.workflowIds?.length) workflowIds.push(...attrs.workflowIds);
           if (attrs.toolIds?.length) toolIds = attrs.toolIds;
           if (attrs.kscIds?.length) kscIds = attrs.kscIds;
-          logger.info('Cascade deleting kscIds: ' + kscIds.join(', '));
+          logger.info(`Cascade deleting for connector ${id}: workflows=${workflowIds.length}, tools=${toolIds.length}, kscs=${kscIds.length}`);
         } catch (e) {
           // ignore if not found
         }

@@ -11,7 +11,10 @@
 
 import type { estypes } from '@elastic/elasticsearch';
 import { v4 as generateUuid } from 'uuid';
-import { WorkflowsConnectorFeatureId } from '@kbn/actions-plugin/common/connector_feature_config';
+import {
+  FederatedConnectorFeatureId,
+  WorkflowsConnectorFeatureId,
+} from '@kbn/actions-plugin/common/connector_feature_config';
 import type {
   ActionsClient,
   PluginStartContract as ActionsPluginStartContract,
@@ -1124,13 +1127,31 @@ export class WorkflowsService {
     const actionsClientWithRequest = await this.getActionsClientWithRequest(request);
 
     // Get both connectors and action types
-    const [connectors, actionTypes] = await Promise.all([
+    // Fetch connectors for both workflows and federated feature IDs to include connectors like GitHub
+    const [connectors, workflowsActionTypes, federatedActionTypes] = await Promise.all([
       actionsClient.getAll(spaceId),
       actionsClientWithRequest.listTypes({
         featureId: WorkflowsConnectorFeatureId,
         includeSystemActionTypes: false,
       }),
+      actionsClientWithRequest.listTypes({
+        featureId: FederatedConnectorFeatureId,
+        includeSystemActionTypes: false,
+      }),
     ]);
+
+    // Merge action types, avoiding duplicates
+    const actionTypesMap = new Map<string, typeof workflowsActionTypes[0]>();
+    workflowsActionTypes.forEach((type) => {
+      actionTypesMap.set(type.id, type);
+    });
+    federatedActionTypes.forEach((type) => {
+      // Only add if not already present (workflows takes precedence)
+      if (!actionTypesMap.has(type.id)) {
+        actionTypesMap.set(type.id, type);
+      }
+    });
+    const actionTypes = Array.from(actionTypesMap.values());
 
     // Note: We now get display names directly from actionTypes, no need for the map
 

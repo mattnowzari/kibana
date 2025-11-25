@@ -28,9 +28,9 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
   }
 
   /**
-   * Creates a Kibana stack connector for Notion
+   * Creates a Kibana stack connector for OAuth connectors (Notion, GitHub, etc.)
    * @param connectorName - The name of the connector
-   * @param connectorType - The type of connector (e.g., 'notion')
+   * @param connectorType - The type of connector (e.g., 'notion', 'github')
    * @param secrets - The OAuth token for the connector
    * @param request - The Kibana request object
    * @param feature - Optional feature flag
@@ -88,6 +88,7 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
   private getStackConnectorTypeId(connectorType: string): string {
     const mapping: Record<string, string> = {
       notion: '.notion',
+      github: '.github',
       // Add other connector type mappings as needed
     };
 
