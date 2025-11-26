@@ -15,7 +15,7 @@ import type { JsonValue } from '@kbn/utility-types';
 
 type WorkflowApi = WorkflowsServerPluginSetup['management'];
 
-const WORKFLOW_MAX_WAIT = 60_000;
+const WORKFLOW_MAX_WAIT = 120_000;
 const WORKFLOW_INITIAL_WAIT = 1000;
 const WORKFLOW_CHECK_INTERVAL = 2_500;
 

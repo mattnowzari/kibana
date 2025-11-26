@@ -31,6 +31,8 @@ export interface RerankStep extends BaseStep {
     data_mapping: FieldMapping[];
     language_code: string;
     recognized_entities?: string[];
+    key_terms?: string[]; // Extracted key terms from the query
+    key_terms_rephrased?: string[]; // Rephrased variations of key terms
     recency_biased: boolean;
     date_range_filter?: [string, string] | null;
     max_results?: number;
@@ -88,6 +90,8 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
         data_mapping,
         language_code,
         recognized_entities = [],
+        key_terms = [],
+        key_terms_rephrased = [],
         recency_biased,
         date_range_filter,
         max_results = 10,
@@ -101,6 +105,28 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
         event: { action: 'rerank-input', outcome: 'unknown' },
         tags: ['rerank', 'debug'],
       });
+
+      // Print all inputs clearly
+      console.log('========================================');
+      console.log('🔧 RERANK STEP: INPUT PARAMETERS');
+      console.log('========================================');
+      console.log(`📊 Data length: ${data?.length || 0}`);
+      console.log(`🔍 User question: "${user_question}"`);
+      console.log(`🏷️  Recognized entities: ${recognized_entities.length > 0 ? JSON.stringify(recognized_entities) : '(none)'}`);
+      console.log(`🔑 Key terms: ${key_terms.length > 0 ? JSON.stringify(key_terms) : '(none)'}`);
+      console.log(`🔄 Key terms rephrased: ${key_terms_rephrased.length > 0 ? JSON.stringify(key_terms_rephrased) : '(none)'}`);
+      console.log(`📅 Recency biased: ${recency_biased}`);
+      console.log(`📆 Date range filter: ${date_range_filter ? JSON.stringify(date_range_filter) : '(none)'}`);
+      console.log(`🎯 Max results: ${max_results}`);
+      console.log(`📏 Rerank horizon: ${rerank_horizon}`);
+      console.log(`🧠 Use semantic search: ${use_semantic_search}`);
+      console.log(`🔄 Use rerank: ${use_rerank}`);
+      console.log(`🌐 Language code: ${language_code}`);
+      console.log(`🗺️  Field mappings: ${data_mapping.length} fields`);
+      data_mapping.forEach((field: FieldMapping, idx: number) => {
+        console.log(`   ${idx + 1}. ${field.alias} (${field.type}) <- ${JSON.stringify(field.path)}`);
+      });
+      console.log('========================================\n');
 
       // Step 1: Create dynamic index
       const startCreateIndex = Date.now();
@@ -116,7 +142,7 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
       const indexDocsTime = Date.now() - startIndexDocs;
       console.log(`[RERANK] Documents indexed: ${data.length} docs (took ${indexDocsTime}ms)`);
 
-      // Step 3: Execute multi-strategy search with FORK/FUSE
+      // Step 3: Execute multi-strategy search using Retriever DSL
       const startSearch = Date.now();
       console.log(`[RERANK] Executing multi-strategy search (semantic: ${use_semantic_search}, rerank: ${use_rerank})...`);
       const rerankedData = await this.executeMultiStrategySearch(
@@ -131,7 +157,9 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
         max_results,
         rerank_horizon,
         use_semantic_search,
-        use_rerank
+        use_rerank,
+        key_terms,
+        key_terms_rephrased
       );
       const searchTime = Date.now() - startSearch;
       console.log(`[RERANK] Search completed: returned ${rerankedData.length} results (took ${searchTime}ms)`);
@@ -343,7 +371,8 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
         return {
           type: 'text',
           analyzer: analyzerMap[languageCode] || 'standard',
-          fields: { keyword: { type: 'keyword' } },
+          // Use ignore_above to prevent indexing terms longer than 32766 bytes in the .keyword field
+          fields: { keyword: { type: 'keyword', ignore_above: 32766 } },
         };
       case 'filter_field':
         return { type: 'keyword' };
@@ -459,13 +488,15 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
     maxResults: number,
     rerankHorizon: number,
     useSemanticSearch: boolean,
-    useRerank: boolean
+    useRerank: boolean,
+    keyTerms?: string[],
+    keyTermsRephrased?: string[]
   ): Promise<any[]> {
     const esClient = this.stepExecutionRuntime.contextManager.getEsClientAsUser();
 
-    this.workflowLogger.logInfo(`Executing multi-strategy search on ${indexName}`, {
+    this.workflowLogger.logInfo(`Executing multi-strategy search with Retriever DSL on ${indexName}`, {
       event: { action: 'multi-strategy-search', outcome: 'unknown' },
-      tags: ['rerank', 'elasticsearch', 'esql'],
+      tags: ['rerank', 'elasticsearch', 'retriever'],
     });
 
     // Find all text fields
@@ -480,235 +511,379 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
     // Find date field for recency bias
     const dateField = fieldMappings.find((f) => f.type === 'date_field')?.alias;
 
-    // Build ES|QL query with FORK/FUSE
-    let esqlQuery = `FROM ${indexName} METADATA _id, _index, _score`;
+    // Helper function to wrap a query with date filter and/or recency boost
+    const wrapQueryWithFiltersAndBoost = (baseQuery: any): any => {
+      let wrappedQuery = baseQuery;
 
-    // Add date range filter if provided
-    if (dateRangeFilter && dateRangeFilter.length === 2 && dateField) {
-      esqlQuery += `\n| WHERE ${dateField} >= "${dateRangeFilter[0]}" AND ${dateField} <= "${dateRangeFilter[1]}"`;
-    }
+      // Apply date range filter if provided
+      if (dateRangeFilter && dateRangeFilter.length === 2 && dateField) {
+        wrappedQuery = {
+          bool: {
+            must: baseQuery,
+            filter: {
+              range: {
+                [dateField]: {
+                  gte: dateRangeFilter[0],
+                  lte: dateRangeFilter[1],
+                },
+              },
+            },
+          },
+        };
+      }
 
-    // Build FORK branches for multi-strategy ranking
-    // Each branch searches across ALL text fields with OR to combine scores
-    const forkBranches: string[] = [
-      // Base text search across all fields
-      `(WHERE ${textFields.map(f => `${f}: "${userQuestion}"`).join(' OR ')} | SORT _score DESC)`,
-      // Bigram search across all fields
-      `(WHERE ${textFields.map(f => `${f}_bigram: "${userQuestion}"`).join(' OR ')} | SORT _score DESC)`,
-      // Trigram search across all fields
-      `(WHERE ${textFields.map(f => `${f}_trigram: "${userQuestion}"`).join(' OR ')} | SORT _score DESC)`,
-    ];
+      // Apply recency boost if enabled
+      if (recencyBiased && dateField) {
+        const maxBoost = RerankStepImpl.RECENCY_MAX_BOOST;
 
-    // Only add semantic search branch if enabled
+        wrappedQuery = {
+          function_score: {
+            query: wrappedQuery,
+            functions: [
+              {
+                exp: {
+                  [dateField]: {
+                    origin: 'now',
+                    scale: `${RerankStepImpl.RECENCY_HORIZON_DAYS}d`,
+                    decay: 0.5, // At scale distance, function value decays to 0.5
+                  },
+                },
+                weight: maxBoost,
+              },
+            ],
+            score_mode: 'multiply',
+            boost_mode: 'multiply',
+          },
+        };
+      }
+
+      return wrappedQuery;
+    };
+
+    // Build retriever configuration
+    const retrievers: any[] = [];
+
+    // 1. Standard retriever for base text search (weight 1.0)
+    // Search across all text fields using multi_match
+    const textQuery = {
+      multi_match: {
+        query: userQuestion,
+        fields: textFields,
+      },
+    };
+    retrievers.push({
+      retriever: {
+        standard: {
+          query: wrapQueryWithFiltersAndBoost(textQuery),
+        },
+      },
+    });
+
+    // 2. Standard retriever for bigram search (weight 1.0)
+    const bigramFields = textFields.map(f => `${f}_bigram`);
+    const bigramQuery = {
+      multi_match: {
+        query: userQuestion,
+        fields: bigramFields,
+      },
+    };
+    retrievers.push({
+      retriever: {
+        standard: {
+          query: wrapQueryWithFiltersAndBoost(bigramQuery),
+        },
+      },
+    });
+
+    // 3. Standard retriever for trigram search (weight 1.0)
+    const trigramFields = textFields.map(f => `${f}_trigram`);
+    const trigramQuery = {
+      multi_match: {
+        query: userQuestion,
+        fields: trigramFields,
+      },
+    };
+    retrievers.push({
+      retriever: {
+        standard: {
+          query: wrapQueryWithFiltersAndBoost(trigramQuery),
+        },
+      },
+    });
+
+    // 4. Semantic search via standard retriever with semantic_text fields (weight 1.0) - only if enabled
+    // Note: semantic_text fields must be queried with bool query containing match clauses, not multi_match
     if (useSemanticSearch) {
-      forkBranches.push(
-        // Semantic search across all fields
-        `(WHERE ${textFields.map(f => `match(${f}_semantic, "${userQuestion}")`).join(' OR ')} | SORT _score DESC)`
-      );
+      const semanticFields = textFields.map(f => `${f}_semantic`);
+
+      // Build bool query with should clauses for each semantic field
+      const semanticQuery = {
+        bool: {
+          should: semanticFields.map(field => ({
+            match: {
+              [field]: userQuestion,
+            },
+          })),
+          minimum_should_match: 1,
+        },
+      };
+
+      retrievers.push({
+        retriever: {
+          standard: {
+            query: wrapQueryWithFiltersAndBoost(semanticQuery),
+          },
+        },
+      });
     }
 
-    // Track the number of main search strategy branches (before entity branches)
-    const numMainBranches = forkBranches.length;
+    // 5. Key terms search - search for extracted key terms across text fields (weight 1.0)
+    if (keyTerms && keyTerms.length > 0) {
+      for (const keyTerm of keyTerms) {
+        const keyTermQuery = {
+          multi_match: {
+            query: keyTerm,
+            fields: textFields,
+            type: 'best_fields', // Use best_fields to find documents where term appears strongly
+          },
+        };
 
-    // Add entity boosting if entities provided
-    // Create branches that search for entities across ALL fields with flat score
+        retrievers.push({
+          retriever: {
+            standard: {
+              query: wrapQueryWithFiltersAndBoost(keyTermQuery),
+            },
+          },
+        });
+      }
+    }
+
+    // 6. Rephrased key terms search - search for rephrased variations of key terms (weight 1.0)
+    if (keyTermsRephrased && keyTermsRephrased.length > 0) {
+      for (const rephrasedTerm of keyTermsRephrased) {
+        const rephrasedQuery = {
+          multi_match: {
+            query: rephrasedTerm,
+            fields: textFields,
+            type: 'best_fields',
+          },
+        };
+
+        retrievers.push({
+          retriever: {
+            standard: {
+              query: wrapQueryWithFiltersAndBoost(rephrasedQuery),
+            },
+          },
+        });
+      }
+    }
+
+    // Track the number of main search strategy retrievers (before entity retrievers)
+    const numMainRetrievers = retrievers.length;
+
+    // 7. Entity retrievers (weight 0.5 each)
     if (recognizedEntities.length > 0) {
       const keywordFields = fieldMappings
         .filter((f) => f.type === 'filter_field')
         .map((f) => f.alias);
 
       for (const entity of recognizedEntities) {
-        // For text fields, use full-text search with ":"
-        // For keyword fields, use exact match with "=="
-        const textMatches = textFields.map(f => `${f}: "${entity}"`);
-        const keywordMatches = keywordFields.map(f => `${f} == "${entity}"`);
+        // Build bool query that searches across both text and keyword fields
+        const shouldClauses: any[] = [];
 
-        const allMatches = [...textMatches, ...keywordMatches];
+        // Text field matches
+        textFields.forEach(f => {
+          shouldClauses.push({
+            match: {
+              [f]: entity,
+            },
+          });
+        });
 
-        // Generate flat score: filter for matches, then assign constant score of 1.0
-        forkBranches.push(
-          `(WHERE ${allMatches.join(' OR ')} | EVAL _score = 1.0 | SORT _score DESC)`
-        );
+        // Keyword field matches
+        keywordFields.forEach(f => {
+          shouldClauses.push({
+            term: {
+              [f]: entity,
+            },
+          });
+        });
+
+        const entityQuery = {
+          constant_score: {
+            filter: {
+              bool: {
+                should: shouldClauses,
+                minimum_should_match: 1,
+              },
+            },
+            boost: 1.0,
+          },
+        };
+
+        retrievers.push({
+          retriever: {
+            standard: {
+              query: wrapQueryWithFiltersAndBoost(entityQuery),
+            },
+          },
+        });
       }
     }
 
-    esqlQuery += `\n| FORK\n  ${forkBranches.join('\n  ')}`;
-
-    // Build weights object for FUSE
-    // Main search strategies get weight 1.0, entity branches get weight 0.5
-    const weights: Record<string, number> = {};
-    for (let i = 1; i <= forkBranches.length; i++) {
-      // Entity branches start after the main branches
-      const isEntityBranch = i > numMainBranches;
-      weights[`fork${i}`] = isEntityBranch ? 0.5 : 1.0;
-    }
-
-    // Apply FUSE with recency bias if enabled
-    esqlQuery += `\n| FUSE LINEAR WITH { "weights": ${JSON.stringify(weights)}, "normalizer": "minmax" }`;
-
-    // Add recency boost if enabled and date field exists
-    if (recencyBiased && dateField) {
-      const maxBoost = RerankStepImpl.RECENCY_MAX_BOOST;
-      const minBoost = RerankStepImpl.RECENCY_MIN_BOOST;
-      const decayRate = RerankStepImpl.RECENCY_DECAY_RATE;
-
-      // Exponential decay recency boost: configurable boost decay over time
-      // Formula: boost = MIN_BOOST + (MAX_BOOST - MIN_BOOST) * e^(-decay_rate * age_in_days)
-      // Current config: 2.0x at NOW, 1.0x (no boost) at 30 days
-
-      // Step 1: Calculate age in days from now
-      // Convert both NOW() and the date field to long (milliseconds) before subtracting
-      esqlQuery += `\n| EVAL age_ms = TO_LONG(NOW()) - TO_LONG(${dateField})`;
-      esqlQuery += `\n| EVAL age_days = age_ms / 86400000.0`; // 86400000 ms = 1 day
-
-      // Step 2: Calculate exponential decay boost
-      // ES|QL uses EXP() function for e^x
-      esqlQuery += `\n| EVAL recency_boost = ${minBoost} + ${maxBoost - minBoost} * EXP(-${decayRate} * age_days)`;
-
-      // Step 3: Apply boost by multiplying the relevance score
-      esqlQuery += `\n| EVAL final_score = _score * recency_boost`;
-      esqlQuery += `\n| SORT final_score DESC`;
-    } else {
-      esqlQuery += `\n| SORT _score DESC`;
-    }
-
-    // Limit to rerank_horizon first (these are candidates for reranking)
-    esqlQuery += `\n| LIMIT ${rerankHorizon}`;
-
-    // Apply RERANK operation if enabled
-    if (useRerank) {
-      // Apply semantic RERANK across all searchable fields (text + filter/keyword) for final refinement
-      const allRerankFields = fieldMappings
-        .filter((f) => f.type === 'text_field' || f.type === 'filter_field')
-        .map((f) => f.alias);
-      esqlQuery += `\n| RERANK rerank_score = "${userQuestion}" ON ${allRerankFields.join(', ')}`;
-
-      // Sort by rerank score (we'll prune to max_results later in code)
-      esqlQuery += `\n| SORT rerank_score DESC`;
-
-      // Build KEEP clause to return relevant fields including _id for mapping back to original data
-      const keepFields = fieldMappings
-        .filter((f) => f.type !== 'numeric_field')
-        .map((f) => f.alias);
-      esqlQuery += `\n| KEEP ${keepFields.join(', ')}, _score, rerank_score, _id`;
-    } else {
-      // Without RERANK, already sorted and limited above
-      // Build KEEP clause without rerank_score
-      const keepFields = fieldMappings
-        .filter((f) => f.type !== 'numeric_field')
-        .map((f) => f.alias);
-      esqlQuery += `\n| KEEP ${keepFields.join(', ')}, _score, _id`;
-    }
-
-    // Print ES|QL query to console for debugging
-    console.log('========================================');
-    console.log('🔍 RERANK STEP: ES|QL QUERY');
-    console.log('========================================');
-    console.log(esqlQuery);
-    console.log('========================================');
-
-    this.workflowLogger.logInfo(`Executing ES|QL query:\n${esqlQuery}`, {
-      event: { action: 'multi-strategy-search', outcome: 'unknown' },
-      tags: ['rerank', 'elasticsearch', 'esql', 'query'],
+    // Build retrievers with weights embedded in each retriever object
+    // Main strategies get weight 1.0, entity retrievers get weight 0.5
+    const weightedRetrievers = retrievers.map((ret, idx) => {
+      const isEntityRetriever = idx >= numMainRetrievers;
+      return {
+        ...ret,
+        weight: isEntityRetriever ? 0.5 : 1.0,
+      };
     });
 
-    // Use the ES|QL query API with proper format
-    const requestBody = {
-      query: esqlQuery,
+    // Build the retriever query using linear combiner
+    // Note: Date range filtering and recency boosting are applied within each retriever's query
+    let retrieverQuery: any = {
+      retriever: {
+        linear: {
+          retrievers: weightedRetrievers,
+          rank_window_size: rerankHorizon,
+        },
+      },
+      size: rerankHorizon,
     };
 
+    // Apply text_similarity_reranker if rerank is enabled
+    if (useRerank) {
+      // text_similarity_reranker only supports a single field
+      // Select the text field with the longest maximum content across all documents
+      const textFieldsForRerank = fieldMappings.filter((f) => f.type === 'text_field');
 
-    this.workflowLogger.logInfo(`ES|QL request body: ${JSON.stringify(requestBody, null, 2)}`, {
-      event: { action: 'multi-strategy-search', outcome: 'unknown' },
-      tags: ['rerank', 'elasticsearch', 'esql', 'debug'],
+      let selectedRerankField = textFieldsForRerank[0]?.alias;
+      let maxFieldLength = 0;
+
+      // Analyze all documents to find which text field has the longest max content
+      for (const field of textFieldsForRerank) {
+        let maxLengthForField = 0;
+
+        for (const doc of originalData) {
+          const value = this.extractFieldValue(doc, field.path);
+          if (typeof value === 'string') {
+            maxLengthForField = Math.max(maxLengthForField, value.length);
+          }
+        }
+
+        if (maxLengthForField > maxFieldLength) {
+          maxFieldLength = maxLengthForField;
+          selectedRerankField = field.alias;
+        }
+      }
+
+      console.log(`[RERANK] Selected field for reranking: ${selectedRerankField} (max length: ${maxFieldLength} chars)`);
+
+      retrieverQuery.retriever = {
+        text_similarity_reranker: {
+          retriever: retrieverQuery.retriever,
+          field: selectedRerankField, // Single field name
+          inference_text: userQuestion,
+          rank_window_size: rerankHorizon,
+          // Use chunk_rescorer to handle long documents by chunking them before reranking
+          chunk_rescorer: {
+            size: 1, // Number of best-scoring chunks to pass to reranker per document
+            // Use default optimal chunking settings for Elastic Rerank
+          },
+        },
+      };
+    }
+
+    // Print retriever DSL query to console for debugging
+    console.log('========================================');
+    console.log('🔍 RERANK STEP: RETRIEVER DSL QUERY');
+    console.log('========================================');
+    console.log(JSON.stringify(retrieverQuery, null, 2));
+    console.log('========================================');
+
+    this.workflowLogger.logInfo(`Executing Retriever DSL query:\n${JSON.stringify(retrieverQuery, null, 2)}`, {
+      event: { action: 'multi-strategy-search-retriever', outcome: 'unknown' },
+      tags: ['rerank', 'elasticsearch', 'retriever', 'query'],
     });
 
+    // Execute the search
     let response;
     const queryStartTime = Date.now();
-    console.log('[RERANK] Executing ES|QL transport.request... (timeout: 5m)');
+    console.log('[RERANK] Executing Retriever DSL search... (timeout: 5m)');
     try {
-      response = await esClient.transport.request({
-        method: 'POST',
-        path: '/_query?format=json',
-        body: requestBody,
+      response = await esClient.search({
+        index: indexName,
+        ...retrieverQuery,
       }, {
-        requestTimeout: 300000, // 5 minute timeout for rerank operations (includes RERANK inference time)
+        requestTimeout: 300000, // 5 minute timeout for rerank operations
       });
       const queryEndTime = Date.now();
       const queryTime = queryEndTime - queryStartTime;
-      const esqlResponse = response as any;
 
-      console.log(`[RERANK] ES|QL query completed (took ${queryTime}ms)`);
+      console.log(`[RERANK] Retriever DSL search completed (took ${queryTime}ms)`);
       console.log('========================================');
-      console.log('🔍 RERANK STEP: ES|QL RESPONSE');
+      console.log('🔍 RERANK STEP: RETRIEVER DSL RESPONSE');
       console.log('========================================');
-      console.log(JSON.stringify(esqlResponse, null, 2));
+      console.log(JSON.stringify(response, null, 2));
       console.log('========================================');
     } catch (error) {
-      this.workflowLogger.logError(`ES|QL request failed`, error as Error, {
-        event: { action: 'multi-strategy-search', outcome: 'failure' },
-        tags: ['rerank', 'elasticsearch', 'esql', 'error'],
+      console.log('========================================');
+      console.log('❌ RERANK STEP: RETRIEVER DSL ERROR');
+      console.log('========================================');
+      console.log('Error object:', error);
+      console.log('Error JSON:', JSON.stringify(error, null, 2));
+      if (error && typeof error === 'object') {
+        console.log('Error keys:', Object.keys(error));
+        const err = error as any;
+        if (err.meta) {
+          console.log('Error meta:', JSON.stringify(err.meta, null, 2));
+        }
+        if (err.body) {
+          console.log('Error body:', JSON.stringify(err.body, null, 2));
+        }
+        if (err.message) {
+          console.log('Error message:', err.message);
+        }
+        if (err.stack) {
+          console.log('Error stack:', err.stack);
+        }
+      }
+      console.log('========================================');
+
+      this.workflowLogger.logError(`Retriever DSL search failed`, error as Error, {
+        event: { action: 'multi-strategy-search-retriever', outcome: 'failure' },
+        tags: ['rerank', 'elasticsearch', 'retriever', 'error'],
       });
       throw error;
     }
 
-    this.workflowLogger.logInfo('Multi-strategy search completed', {
-      event: { action: 'multi-strategy-search', outcome: 'success' },
-      tags: ['rerank', 'elasticsearch', 'esql'],
+    this.workflowLogger.logInfo('Multi-strategy search with Retriever DSL completed', {
+      event: { action: 'multi-strategy-search-retriever', outcome: 'success' },
+      tags: ['rerank', 'elasticsearch', 'retriever'],
     });
 
-    // Map ES|QL results back to original data objects in ranked order
-    // ES|QL returns: { columns: [...], values: [[...], [...]] }
-    const esqlResponse = response as any;
+    // Map search results back to original data objects
+    const hits = (response as any).hits?.hits || [];
 
-    // Debug: Log the ES|QL response structure
-
-    this.workflowLogger.logInfo(`ES|QL Response Structure:`, {
-      event: { action: 'esql-response-debug', outcome: 'success' },
-      tags: ['rerank', 'elasticsearch', 'esql', 'debug'],
-    });
-    this.workflowLogger.logInfo(`Columns: ${JSON.stringify(esqlResponse.columns)}`, {
-      event: { action: 'esql-response-debug', outcome: 'success' },
-      tags: ['rerank', 'elasticsearch', 'esql', 'debug'],
-    });
-    this.workflowLogger.logInfo(`Number of result rows: ${esqlResponse.values?.length || 0}`, {
-      event: { action: 'esql-response-debug', outcome: 'success' },
-      tags: ['rerank', 'elasticsearch', 'esql', 'debug'],
-    });
-    this.workflowLogger.logInfo(`First few rows: ${JSON.stringify(esqlResponse.values?.slice(0, 3), null, 2)}`, {
-      event: { action: 'esql-response-debug', outcome: 'success' },
-      tags: ['rerank', 'elasticsearch', 'esql', 'debug'],
-    });
-
-    // Find the _id column index
-    const idColumnIndex = esqlResponse.columns.findIndex((col: any) => col.name === '_id');
-
-    if (idColumnIndex === -1) {
-      this.workflowLogger.logError('_id column not found in ES|QL response', new Error('Missing _id'), {
-        event: { action: 'multi-strategy-search', outcome: 'failure' },
-        tags: ['rerank', 'elasticsearch', 'esql', 'error'],
-      });
-      // Fallback: return original data in original order
-      return originalData;
-    }
-
-    // Map each result row to the original data object and track which indices were used
+    // Track which indices were used
     const usedIndices = new Set<number>();
-    const esResults = esqlResponse.values
-      .map((row: any[], idx: number) => {
-        const docId = row[idColumnIndex];
+    const esResults = hits
+      .map((hit: any) => {
+        const docId = hit._id;
         const originalIndex = docIdMap.get(docId);
 
         if (originalIndex !== undefined) {
           usedIndices.add(originalIndex);
-          const originalItem = originalData[originalIndex];
-          return originalItem;
+          return originalData[originalIndex];
         }
         return null;
       })
       .filter((item: any) => item !== null);
 
-    console.log(`[RERANK] ES|QL returned ${esResults.length} results, need ${maxResults} total`);
+    console.log(`[RERANK] Retriever DSL returned ${esResults.length} results, need ${maxResults} total`);
 
     // If we got fewer results than max_results, backfill with unused items from original data
     let finalResults = [...esResults];
@@ -716,7 +891,7 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
     if (finalResults.length < maxResults) {
       console.log(`[RERANK] Backfilling ${maxResults - finalResults.length} items from original data`);
 
-      // Get items that weren't in the ES results (in original order)
+      // Get items that weren't in the search results (in original order)
       const unusedItems = originalData.filter((_item, index) => !usedIndices.has(index));
 
       // Add unused items until we reach max_results
@@ -730,13 +905,14 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
     // Ensure we don't exceed max_results
     finalResults = finalResults.slice(0, maxResults);
 
-    this.workflowLogger.logInfo(`Final result: ${finalResults.length} documents (${esResults.length} from ES, ${finalResults.length - esResults.length} backfilled)`, {
-      event: { action: 'multi-strategy-search', outcome: 'success' },
-      tags: ['rerank', 'elasticsearch', 'esql'],
+    this.workflowLogger.logInfo(`Final result: ${finalResults.length} documents (${esResults.length} from search, ${finalResults.length - esResults.length} backfilled)`, {
+      event: { action: 'multi-strategy-search-retriever', outcome: 'success' },
+      tags: ['rerank', 'elasticsearch', 'retriever'],
     });
 
     return finalResults;
   }
+
 
   private logBeforeAfterComparison(
     originalData: any[],
@@ -767,7 +943,7 @@ export class RerankStepImpl extends BaseAtomicNodeImplementation<RerankStep> {
     });
 
     // Show top 3 from reranked data
-    console.log('\n\n🟢 AFTER RERANKING (ES|QL Multi-Strategy):');
+    console.log(`\n\n🟢 AFTER RERANKING (Retriever DSL):`);
     const top3After = rerankedData.slice(0, 3);
     top3After.forEach((item, idx) => {
       console.log(`\n  ${idx + 1}.`);

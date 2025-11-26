@@ -272,6 +272,10 @@ export const RerankStepSchema = BaseStepSchema.extend({
     language_code: z.string().optional().default('en'),
     // Recognized entities from query (for boosting)
     recognized_entities: z.array(z.string()).optional().default([]),
+    // Extracted key terms from the query
+    key_terms: z.array(z.string()).optional().default([]),
+    // Rephrased variations of key terms
+    key_terms_rephrased: z.array(z.string()).optional().default([]),
     // Whether to bias recent results
     recency_biased: z.boolean().optional().default(false),
     // Date range filter [start, end] as ISO strings
@@ -280,6 +284,12 @@ export const RerankStepSchema = BaseStepSchema.extend({
     index_prefix: z.string().optional().default('auto-rerank'),
     // Maximum number of results to return
     max_results: z.number().int().positive().optional().default(10),
+    // How many results to retrieve before final RERANK (default: 20)
+    rerank_horizon: z.number().int().positive().optional().default(20),
+    // Enable semantic_text indexing and semantic search (default: true)
+    use_semantic_search: z.boolean().optional().default(true),
+    // Enable cross-encoder RERANK operation (default: true)
+    use_rerank: z.boolean().optional().default(true),
   }),
 })
   .merge(TimeoutPropSchema)
