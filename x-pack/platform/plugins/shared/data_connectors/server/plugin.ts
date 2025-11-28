@@ -107,6 +107,11 @@ export class DataConnectorsServerPlugin
       this.workflowCreator.setOnechat(onechat);
     }
 
+    // Wire actions into the workflow creator for metadata access
+    if (actions && this.workflowCreator) {
+      this.workflowCreator.setActions(actions);
+    }
+
     // Wire actions into the stack connector creator
     if (actions && this.stackConnectorCreator) {
       this.stackConnectorCreator.setActions(actions);

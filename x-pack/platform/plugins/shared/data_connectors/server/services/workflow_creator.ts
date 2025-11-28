@@ -10,6 +10,7 @@ import type { WorkflowsServerPluginSetup } from '@kbn/workflows-management-plugi
 import type { KibanaRequest } from '@kbn/core/server';
 import { ToolType } from '@kbn/onechat-common';
 import type { OnechatPluginStart } from '@kbn/onechat-plugin/server';
+import type { PluginStartContract as ActionsPluginStart } from '@kbn/actions-plugin/server';
 import { kebabCase, lowerCase } from 'lodash';
 import { createBraveSearchWorkflowTemplate } from '../workflows/brave_search_template';
 import {
@@ -17,7 +18,7 @@ import {
   // createGoogleDriveDownloadWorkflowTemplate,
 } from '../workflows/google_drive_template';
 import { createSlackWorkflowTemplate } from '../workflows/slack_template';
-import { createNotionSearchWorkflowTemplates } from '../workflows/notion_template';
+import { getConnectorMetadata } from '../utils/get_connector_metadata';
 import type { StackConnectorCreatorService } from './ksc_creator';
 
 export interface WorkflowCreatorService {
@@ -35,6 +36,8 @@ export interface WorkflowCreatorService {
 }
 
 export class WorkflowCreator implements WorkflowCreatorService {
+  private actions?: ActionsPluginStart;
+
   constructor(
     private readonly logger: Logger,
     private readonly workflowsManagement: WorkflowsServerPluginSetup,
@@ -44,6 +47,10 @@ export class WorkflowCreator implements WorkflowCreatorService {
 
   public setOnechat(onechat: OnechatPluginStart) {
     this.onechat = onechat;
+  }
+
+  public setActions(actions: ActionsPluginStart) {
+    this.actions = actions;
   }
 
   /**
@@ -107,7 +114,56 @@ export class WorkflowCreator implements WorkflowCreatorService {
         workflowYamls = [createSlackWorkflowTemplate(connectorId, feature)];
         break;
       case 'notion':
-        workflowYamls = createNotionSearchWorkflowTemplates(stackConnectorId);
+        // Use workflowTemplates from ExtendedConnectorType metadata
+        if (this.actions) {
+          // Connector type IDs in the actions registry have a dot prefix
+          const connectorTypeId = `.${connectorType}`;
+
+          // Debug: List all available connector types
+          const allTypes = this.actions.listTypes();
+          this.logger.info(`Available connector types: ${allTypes.map((t) => t.id).join(', ')}`);
+
+          // Debug: Log the actual connector type object
+          const connectorTypes = this.actions.listTypes();
+          const notionConnectorType = connectorTypes.find((ct) => ct.id === connectorTypeId);
+          if (notionConnectorType) {
+            this.logger.info(
+              `Found connector type object. Keys: ${Object.keys(notionConnectorType).join(', ')}`
+            );
+            this.logger.info(
+              `Has workplaceMetadata: ${
+                (notionConnectorType as any).workplaceMetadata !== undefined
+              }`
+            );
+          }
+
+          const metadata = getConnectorMetadata(this.actions, connectorTypeId);
+
+          this.logger.info(
+            `Retrieved metadata for ${connectorTypeId}: ${metadata ? 'found' : 'not found'}`
+          );
+
+          if (metadata?.workflowTemplates) {
+            this.logger.info(
+              `Found ${Object.keys(metadata.workflowTemplates).length} workflow templates`
+            );
+            workflowYamls = Object.values(metadata.workflowTemplates).map((generator) =>
+              generator(stackConnectorId)
+            );
+          } else {
+            // Log more details about what we found
+            if (metadata) {
+              this.logger.warn(
+                `Metadata exists but has no workflowTemplates. Keys: ${Object.keys(metadata).join(
+                  ', '
+                )}`
+              );
+            }
+            throw new Error(`No workflow templates found for ${connectorTypeId} connector`);
+          }
+        } else {
+          throw new Error('Actions plugin not available for workflow template generation');
+        }
         break;
       default:
         throw new Error(`Unsupported connector type: ${connectorType}`);
@@ -173,6 +229,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
   public async deleteKSCs(stackConnectorIds: string[], request: KibanaRequest) {
     if (!this.stackConnectorCreator) {
       this.logger.info('Stack connector creator not available; skipping KSC deletion');
+      return;
     }
     this.logger.info(`Deleting KSCs: ${stackConnectorIds.join(', ')}`);
     try {
