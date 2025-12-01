@@ -11,13 +11,16 @@ import type { KibanaRequest } from '@kbn/core/server';
 import { ToolType } from '@kbn/onechat-common';
 import type { OnechatPluginStart } from '@kbn/onechat-plugin/server';
 import { kebabCase, lowerCase } from 'lodash';
+import type {
+  DataSourcesRegistryPluginStart,
+  DataTypeDefinition,
+} from '@kbn/data-sources-registry-plugin/server';
 import { createBraveSearchWorkflowTemplate } from '../workflows/brave_search_template';
 import {
   createGoogleDriveWorkflowTemplate,
   // createGoogleDriveDownloadWorkflowTemplate,
 } from '../workflows/google_drive_template';
 import { createSlackWorkflowTemplate } from '../workflows/slack_template';
-import { createNotionSearchWorkflowTemplates } from '../workflows/notion_template';
 import type { StackConnectorCreatorService } from './ksc_creator';
 
 export interface WorkflowCreatorService {
@@ -39,11 +42,15 @@ export class WorkflowCreator implements WorkflowCreatorService {
     private readonly logger: Logger,
     private readonly workflowsManagement: WorkflowsServerPluginSetup,
     private onechat?: OnechatPluginStart,
+    private dataRegistry?: DataSourcesRegistryPluginStart,
     private stackConnectorCreator?: StackConnectorCreatorService
   ) {}
 
   public setOnechat(onechat: OnechatPluginStart) {
     this.onechat = onechat;
+  }
+  public setDataSourcesRegistry(dataRegistry: DataSourcesRegistryPluginStart) {
+    this.dataRegistry = dataRegistry;
   }
 
   /**
@@ -70,13 +77,29 @@ export class WorkflowCreator implements WorkflowCreatorService {
     let stackConnectorId = '';
     const toolIds: string[] = [];
 
+    if (!this.dataRegistry) {
+      throw new Error('Data sources registry not available');
+    }
+
+    const dataCatalog = this.dataRegistry.getCatalog();
+
+    let dataType: DataTypeDefinition;
+    if (connectorType === 'notion') {
+      dataType = dataCatalog.get(connectorType);
+      if (!dataType) {
+        throw new Error(`Unsupported data type: ${connectorType}`);
+      }
+    }
+
     // For Notion connectors, create a Kibana stack connector first
     if (connectorType === 'notion' && this.stackConnectorCreator && secrets) {
       try {
         const connectorName = `Notion Connector for ${connectorId}`;
+        const stackConnectorTypeId = dataType.stackConnector.type;
         stackConnectorId = await this.stackConnectorCreator.instantiateStackConnector(
           connectorName,
           connectorType,
+          stackConnectorTypeId,
           secrets,
           request,
           feature
@@ -92,29 +115,47 @@ export class WorkflowCreator implements WorkflowCreatorService {
       }
     }
 
-    let workflowYamls: string[];
+    let workflowYamls: { content: string; tool: boolean }[];
 
     // Get the appropriate template based on connector type
     // Template includes secret reference that will be resolved at runtime
     switch (connectorType) {
       case 'brave_search':
-        workflowYamls = [createBraveSearchWorkflowTemplate(connectorId, feature)];
+        workflowYamls = [
+          { content: createBraveSearchWorkflowTemplate(connectorId, feature), tool: true },
+        ];
         break;
       case 'google_drive':
-        workflowYamls = [createGoogleDriveWorkflowTemplate(connectorId, feature)];
+        workflowYamls = [
+          { content: createGoogleDriveWorkflowTemplate(connectorId, feature), tool: true },
+        ];
         break;
       case 'slack':
-        workflowYamls = [createSlackWorkflowTemplate(connectorId, feature)];
+        workflowYamls = [
+          { content: createSlackWorkflowTemplate(connectorId, feature), tool: true },
+        ];
         break;
       case 'notion':
-        workflowYamls = createNotionSearchWorkflowTemplates(stackConnectorId);
+        workflowYamls = [];
+        for (const w of dataType.generateWorkflows()) {
+          workflowYamls.push({
+            content: w.getContent(stackConnectorId),
+            tool: w.shouldGenerateABTool,
+          });
+        }
+        // workflowYamls = createNotionSearchWorkflowTemplates(stackConnectorId);
         break;
       default:
         throw new Error(`Unsupported connector type: ${connectorType}`);
     }
 
     const workflowIds: string[] = [];
-    for (const workflowYaml of workflowYamls) {
+    this.logger.info(
+      `Creating workflows for connector ${connectorId}: ${workflowYamls.join(', ')}`
+    );
+    for (const workflowObj of workflowYamls) {
+      const workflowYaml = workflowObj.content;
+      const shouldCreateABTool = workflowObj.tool;
       try {
         // Create the workflow using the workflows management API
         const workflow = await this.workflowsManagement.management.createWorkflow(
@@ -132,7 +173,7 @@ export class WorkflowCreator implements WorkflowCreatorService {
 
         // Optionally create a Onechat workflow tool tied to the created workflow
         try {
-          if (this.onechat) {
+          if (this.onechat && shouldCreateABTool) {
             const registry = await this.onechat.tools.getRegistry({ request });
             const toolId = `${connectorType}.${kebabCase(lowerCase(workflow.name))}`;
 

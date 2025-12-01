@@ -67,6 +67,7 @@ export class DataConnectorsServerPlugin
       this.logger,
       workflowsManagement,
       undefined,
+      undefined,
       stackConnectorCreator
     );
     this.workflowCreator = workflowCreator;
@@ -82,13 +83,18 @@ export class DataConnectorsServerPlugin
     core: CoreStart,
     plugins: DataConnectorsServerStartDependencies
   ): DataConnectorsServerStart {
-    const { onechat, actions } = plugins ?? {};
+    const { onechat, actions, dataSourcesRegistry } = plugins ?? {};
 
     const secretResolver = new SecretResolver(this.logger);
 
     // Now that start deps are available, wire Onechat into the workflow creator if present
     if (onechat && this.workflowCreator) {
       this.workflowCreator.setOnechat(onechat);
+    }
+
+    // Wire dataSourcesRegistry into the workflow creator
+    if (dataSourcesRegistry && this.workflowCreator) {
+      this.workflowCreator.setDataSourcesRegistry(dataSourcesRegistry);
     }
 
     // Wire actions into the stack connector creator

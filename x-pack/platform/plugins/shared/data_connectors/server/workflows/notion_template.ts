@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-function generateSearchWorkflow(stackConnectorId: string): string {
+export function generateSearchWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion search'
 description: 'Search for pages or data sources that contain a given string in the title'
@@ -31,7 +31,7 @@ steps:
 `;
 }
 
-function generateQueryWorkflow(stackConnectorId: string): string {
+export function generateQueryWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion query data source'
 description: 'Given the ID of a data source, query information about its rows. By default it will fetch 10 items, unless you specify page_size or cursor. You can filter the results by specifying the \`filter\`, which is a string representation of the JSON that would be passed, as per documentation in https://developers.notion.com/reference/filter-data-source-entries'
@@ -64,7 +64,7 @@ steps:
 `;
 }
 
-function generateGetPageWorkflow(stackConnectorId: string): string {
+export function generateGetPageWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion get page'
 description: 'Given the ID of a Notion page, get metadata related to it'
@@ -84,7 +84,7 @@ steps:
 `;
 }
 
-function generateGetDataSourceWorkflow(stackConnectorId: string): string {
+export function generateGetDataSourceWorkflow(stackConnectorId: string): string {
   return `version: '1'
 name: 'Notion get data source'
 description: 'Given the ID of a data source, get information about its columns'

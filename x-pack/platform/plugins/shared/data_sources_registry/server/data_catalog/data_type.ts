@@ -4,6 +4,11 @@
  * 2.0; you may not use this file except in compliance with the Elastic License
  * 2.0.
  */
+export interface WorkflowInfo {
+  getContent: (stackConnectorId: string) => string;
+  shouldGenerateABTool: boolean;
+}
+
 // Abstraction defining a federated data source ("fetcher")
 // This needs to define connectivity (oauth) configuration,
 // what tools should be created, what workflows should be created
@@ -16,10 +21,7 @@ export interface DataTypeDefinition {
 
   // "taking action" / "execution" part of a data source - i.e. how to interact with data stored in 3rd party
   // the only model for "taking action"/"executing" sth against the 3rd party is via workflows
-  workflowTemplates: {
-    content: string;
-    generateTool: boolean;
-  }[];
+  generateWorkflows(): WorkflowInfo[];
   // the only model for executing sth from a workflow against the 3rd party is via stack connectors
   stackConnector: {
     type: string;

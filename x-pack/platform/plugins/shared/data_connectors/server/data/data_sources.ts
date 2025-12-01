@@ -9,21 +9,32 @@ import type {
   DataSourcesRegistryPluginSetup,
   DataTypeDefinition,
 } from '@kbn/data-sources-registry-plugin/server';
-import { createNotionSearchWorkflowTemplates } from '../workflows/notion_template';
+import type { WorkflowInfo } from '@kbn/data-sources-registry-plugin/server/data_catalog/data_type';
+import { generateQueryWorkflow, generateSearchWorkflow } from '../workflows/notion_template';
 
 export class NotionDataSource implements DataTypeDefinition {
-  readonly id = '.notion';
+  readonly id = 'notion';
   readonly name = 'Notion';
   description = 'Connect to Notion to pull data from your workspace.';
 
-  workflowTemplates = [{ content: createNotionSearchWorkflowTemplates('')[0], generateTool: true }];
-  stackConnector = { type: '.notion', config: {} };
   oauthConfiguration = {
     provider: 'notion',
     initiatePath: '/oauth/start/notion',
     fetchSecretsPath: '/oauth/fetch_request_secrets',
     oauthBaseUrl: 'https://localhost:8052',
   };
+
+  stackConnector = {
+    type: '.notion',
+    config: {},
+  };
+
+  generateWorkflows(): WorkflowInfo[] {
+    return [
+      { getContent: generateQueryWorkflow, shouldGenerateABTool: true },
+      { getContent: generateSearchWorkflow, shouldGenerateABTool: false },
+    ];
+  }
 }
 
 export function registerDataSources(dataSourcesRegistry: DataSourcesRegistryPluginSetup) {

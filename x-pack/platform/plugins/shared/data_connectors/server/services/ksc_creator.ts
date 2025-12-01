@@ -13,6 +13,7 @@ export interface StackConnectorCreatorService {
   instantiateStackConnector(
     connectorName: string,
     connectorType: string,
+    stackConnectorTypeId: string,
     secrets: string,
     request: KibanaRequest,
     feature?: string
@@ -31,6 +32,7 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
    * Creates a Kibana stack connector for Notion
    * @param connectorName - The name of the connector
    * @param connectorType - The type of connector (e.g., 'notion')
+   * @param stackConnectorTypeId - The type of connector (e.g., '.notion')
    * @param secrets - The OAuth token for the connector
    * @param request - The Kibana request object
    * @param feature - Optional feature flag
@@ -39,6 +41,7 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
   async instantiateStackConnector(
     connectorName: string,
     connectorType: string,
+    stackConnectorTypeId: string,
     secrets: string,
     request: KibanaRequest,
     feature?: string
@@ -53,9 +56,6 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
 
     try {
       const actionsClient = await this.actions.getActionsClientWithRequest(request);
-
-      // Map connector type to stack connector type ID
-      const stackConnectorTypeId = this.getStackConnectorTypeId(connectorType);
 
       // Create the connector
       const connector = await actionsClient.create({
@@ -80,23 +80,6 @@ export class StackConnectorCreator implements StackConnectorCreatorService {
       );
       throw error;
     }
-  }
-
-  /**
-   * Maps workplace connector type to stack connector type ID
-   */
-  private getStackConnectorTypeId(connectorType: string): string {
-    const mapping: Record<string, string> = {
-      notion: '.notion',
-      // Add other connector type mappings as needed
-    };
-
-    const stackConnectorTypeId = mapping[connectorType];
-    if (!stackConnectorTypeId) {
-      throw new Error(`Unsupported connector type for stack connector: ${connectorType}`);
-    }
-
-    return stackConnectorTypeId;
   }
 
   async disconnectStackConnector(connectorId: string, request: KibanaRequest): Promise<void> {
