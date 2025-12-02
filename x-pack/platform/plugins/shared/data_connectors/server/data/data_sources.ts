@@ -34,10 +34,10 @@ export class NotionDataSource implements DataTypeDefinition {
     config: {},
   };
 
-  generateWorkflows(): WorkflowInfo[] {
+  generateWorkflows(stackConnectorId: string): WorkflowInfo[] {
     return [
-      { getContent: generateQueryWorkflow, shouldGenerateABTool: true },
-      { getContent: generateSearchWorkflow, shouldGenerateABTool: false },
+      { content: generateQueryWorkflow(stackConnectorId), shouldGenerateABTool: true },
+      { content: generateSearchWorkflow(stackConnectorId), shouldGenerateABTool: false },
     ];
   }
 }

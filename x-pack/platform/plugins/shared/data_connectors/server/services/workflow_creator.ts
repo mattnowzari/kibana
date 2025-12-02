@@ -137,9 +137,9 @@ export class WorkflowCreator implements WorkflowCreatorService {
         break;
       case 'notion':
         workflowYamls = [];
-        for (const w of dataType.generateWorkflows()) {
+        for (const w of dataType.generateWorkflows(stackConnectorId)) {
           workflowYamls.push({
-            content: w.getContent(stackConnectorId),
+            content: w.content,
             tool: w.shouldGenerateABTool,
           });
         }

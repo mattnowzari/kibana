@@ -18,8 +18,8 @@ export enum SupportedOAuthProvider {
  * Represents a workflow that can be generated for a data source type
  */
 export interface WorkflowInfo {
-  /** Generates the workflow content with the provided stack connector ID */
-  getContent: (stackConnectorId: string) => string;
+  /** Complete workflow content including references to any required stack connector IDs */
+  content: string;
   /** Whether an Agent Builder tool should be generated for this workflow */
   shouldGenerateABTool: boolean;
 }
@@ -63,7 +63,7 @@ export interface DataTypeDefinition {
    * Generates workflows for interacting with the third-party data source.
    * Workflows are the only model for "taking action" against the third party.
    */
-  generateWorkflows(): WorkflowInfo[];
+  generateWorkflows(stackConnectorId?: string): WorkflowInfo[];
 
   /**
    * Stack connector configuration.

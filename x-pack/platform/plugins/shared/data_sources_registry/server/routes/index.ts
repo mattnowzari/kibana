@@ -49,15 +49,11 @@ export function registerRoutes(router: IRouter, dataCatalog: DataCatalog) {
         if (!type) {
           return response.notFound({ body: `Type ${request.params.id} not found` });
         }
-        const workflowInfos = type.generateWorkflows();
-        const workflows = workflowInfos.map((workflowInfo) => ({
-          content: workflowInfo.getContent('<fake-stack-connector-id>'),
-          shouldGenerateABTool: workflowInfo.shouldGenerateABTool,
-        }));
+        const workflowInfos = type.generateWorkflows('<fake-stack-connector-id>');
         return response.ok({
           body: {
             ...type,
-            workflows,
+            workflowInfos,
           },
         });
       } catch (err) {
