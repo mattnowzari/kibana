@@ -4,43 +4,73 @@
  * 2.0; you may not use this file except in compliance with the Elastic License
  * 2.0.
  */
-// OAuth providers supported by EARS
+
+/**
+ * OAuth providers supported by EARS
+ */
 export enum SupportedOAuthProvider {
   GITHUB = 'github',
   GOOGLE = 'google',
   NOTION = 'notion',
 }
 
+/**
+ * Represents a workflow that can be generated for a data source type
+ */
 export interface WorkflowInfo {
+  /** Generates the workflow content with the provided stack connector ID */
   getContent: (stackConnectorId: string) => string;
+  /** Whether an Agent Builder tool should be generated for this workflow */
   shouldGenerateABTool: boolean;
 }
 
-// Abstraction defining a federated data source ("fetcher")
-// This needs to define connectivity (oauth) configuration,
-// what tools should be created, what workflows should be created
-// TODO: handle FE config as well
+/**
+ * Configuration for OAuth authentication
+ */
+export interface OAuthConfiguration {
+  provider: SupportedOAuthProvider;
+  scopes?: string[];
+  initiatePath: string;
+  fetchSecretsPath: string;
+  oauthBaseUrl: string;
+}
+
+/**
+ * Configuration for a stack connector associated with a data source type
+ */
+export interface StackConnectorConfig {
+  type: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Abstraction defining a federated data source ("fetcher").
+ * This defines:
+ * - Connectivity (OAuth) configuration
+ * - What workflows should be created
+ * - How to interact with data stored in third-party systems
+ *
+ */
 export interface DataTypeDefinition {
-  // metadata
+  /** Unique identifier for the data type */
   id: string;
+  /** Display name for the data type */
   name: string;
+  /** Optional description of the data type */
   description?: string;
 
-  // "taking action" / "execution" part of a data source - i.e. how to interact with data stored in 3rd party
-  // the only model for "taking action"/"executing" sth against the 3rd party is via workflows
+  /**
+   * Generates workflows for interacting with the third-party data source.
+   * Workflows are the only model for "taking action" against the third party.
+   */
   generateWorkflows(): WorkflowInfo[];
-  // the only model for executing sth from a workflow against the 3rd party is via stack connectors
-  stackConnector: {
-    type: string;
-    config: {};
-  };
 
-  // auth
-  oauthConfiguration?: {
-    provider: SupportedOAuthProvider;
-    scopes?: string[];
-    initiatePath: string;
-    fetchSecretsPath: string;
-    oauthBaseUrl: string;
-  };
+  /**
+   * Stack connector configuration.
+   * Stack connectors are the only model for executing workflow actions against the third party.
+   */
+  stackConnector: StackConnectorConfig;
+
+  /** OAuth configuration for authentication */
+  oauthConfiguration?: OAuthConfiguration;
 }
