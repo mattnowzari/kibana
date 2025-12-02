@@ -4,6 +4,13 @@
  * 2.0; you may not use this file except in compliance with the Elastic License
  * 2.0.
  */
+// OAuth providers supported by EARS
+export enum SupportedOAuthProvider {
+  GITHUB = 'github',
+  GOOGLE = 'google',
+  NOTION = 'notion',
+}
+
 export interface WorkflowInfo {
   getContent: (stackConnectorId: string) => string;
   shouldGenerateABTool: boolean;
@@ -30,7 +37,7 @@ export interface DataTypeDefinition {
 
   // auth
   oauthConfiguration?: {
-    provider: string;
+    provider: SupportedOAuthProvider;
     scopes?: string[];
     initiatePath: string;
     fetchSecretsPath: string;

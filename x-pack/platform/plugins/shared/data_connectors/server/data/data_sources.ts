@@ -10,6 +10,7 @@ import type {
   DataTypeDefinition,
 } from '@kbn/data-sources-registry-plugin/server';
 import type { WorkflowInfo } from '@kbn/data-sources-registry-plugin/server/data_catalog/data_type';
+import { SupportedOAuthProvider } from '@kbn/data-sources-registry-plugin/server/data_catalog/data_type';
 import { generateQueryWorkflow, generateSearchWorkflow } from '../workflows/notion_template';
 
 export class NotionDataSource implements DataTypeDefinition {
@@ -18,7 +19,7 @@ export class NotionDataSource implements DataTypeDefinition {
   description = 'Connect to Notion to pull data from your workspace.';
 
   oauthConfiguration = {
-    provider: 'notion',
+    provider: SupportedOAuthProvider.NOTION,
     initiatePath: '/oauth/start/notion',
     fetchSecretsPath: '/oauth/fetch_request_secrets',
     oauthBaseUrl: 'https://localhost:8052',
