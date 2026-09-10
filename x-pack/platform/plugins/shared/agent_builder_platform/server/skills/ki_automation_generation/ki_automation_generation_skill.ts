@@ -6,8 +6,9 @@
  */
 
 import { defineSkillType } from '@kbn/agent-builder-server/skills/type_definition';
-import { platformCoreTools } from '@kbn/agent-builder-common/tools';
+import { contextEngineAiIndexTools, platformCoreTools } from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
+import { contextEngineSkillAvailability } from '../context_engine_skill_availability';
 import content from './ki_automation_generation.skill.md.text';
 import indexSelectionReferenceYaml from './index_selection_reference.yaml.text';
 
@@ -16,6 +17,7 @@ export const kiAutomationGenerationSkill = defineSkillType({
   name: 'ki-automation-generation',
   basePath: 'skills/platform/context-engine',
   experimental: true,
+  availability: contextEngineSkillAvailability,
   description:
     "Set up the Context Engine for a user's Elasticsearch data or connector sources by generating Knowledge Indicators (KIs). Load when the user wants to make their data queryable by an AI agent, generate KIs, create a KI index, or set up the Context Engine.",
   content,
@@ -34,6 +36,7 @@ export const kiAutomationGenerationSkill = defineSkillType({
     platformCoreTools.listIndices,
     platformCoreTools.getIndexMapping,
     platformCoreTools.getWorkflowExecutionStatus,
+    contextEngineAiIndexTools.queryAiIndices,
     `${internalNamespaces.workflows}.validate_workflow`,
     `${internalNamespaces.workflows}.get_workflow`,
     `${internalNamespaces.workflows}.get_step_definitions`,

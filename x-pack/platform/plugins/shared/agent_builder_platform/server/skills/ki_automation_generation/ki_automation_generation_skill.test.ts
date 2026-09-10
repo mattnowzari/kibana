@@ -7,7 +7,8 @@
 
 import { isAllowedBuiltinSkill } from '@kbn/agent-builder-server/allow_lists';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
-import { platformCoreTools } from '@kbn/agent-builder-common/tools';
+import { contextEngineAiIndexTools, platformCoreTools } from '@kbn/agent-builder-common/tools';
+import { contextEngineSkillAvailability } from '../context_engine_skill_availability';
 import { kiAutomationGenerationSkill } from './ki_automation_generation_skill';
 
 describe('kiAutomationGenerationSkill', () => {
@@ -21,8 +22,9 @@ describe('kiAutomationGenerationSkill', () => {
     expect(isAllowedBuiltinSkill(kiAutomationGenerationSkill.id)).toBe(true);
   });
 
-  it('is gated behind experimental features', () => {
+  it('is gated behind experimental features and Context Engine availability', () => {
     expect(kiAutomationGenerationSkill.experimental).toBe(true);
+    expect(kiAutomationGenerationSkill.availability).toBe(contextEngineSkillAvailability);
   });
 
   it('ships non-empty markdown content', () => {
@@ -49,6 +51,7 @@ describe('kiAutomationGenerationSkill', () => {
       platformCoreTools.listIndices,
       platformCoreTools.getIndexMapping,
       platformCoreTools.getWorkflowExecutionStatus,
+      contextEngineAiIndexTools.queryAiIndices,
       `${internalNamespaces.workflows}.validate_workflow`,
       `${internalNamespaces.workflows}.get_workflow`,
       `${internalNamespaces.workflows}.get_step_definitions`,

@@ -118,7 +118,8 @@ Do **not** hand-write or persist workflow YAML yourself. Use these tools:
   (`verifyKi` gate → `createKi`), and the KI doc shape).
   It emits a diff card and workflow attachment; it does NOT save the workflow.
 - **platform.core.execute_workflow** — run a workflow after the user has saved it.
-- **platform.core.execute_esql** — run an ES|QL query. Use it to validate that "example queries" are functional and correct.
+- **platform.core.execute_esql** — run an ES|QL query against source data. Use it to validate that "example queries" are functional and correct.
+- **platform.context_engine.query_ai_indices** — run an ES|QL query against an AI index, with space scoping applied server-side. Use it to read back generated KIs (Phase 5); never read an AI index with `execute_esql`.
 - **platform.core.generate_esql** — author or repair a single ES|QL query. Use it to hand-craft
   a tricky access pattern template, or re-write queries that failed to execute.
 - **platform.workflows.validate_workflow** — validate a complete YAML string before presenting it.
@@ -295,7 +296,7 @@ calling `generate_workflow` with the existing `attachmentId`, then return to thi
 
 After the user saves and approves, call `platform.core.execute_workflow(attachmentId)`.
 
-Retrieve the 1–3 generated KIs by running `FROM <backing index of the AI index, e.g. ai-index-idx-<ai_index_id>> | WHERE @timestamp >= "<execution.started_at>" | SORT @timestamp DESC | LIMIT 3` with `platform.core.execute_esql`, taking `execution.started_at` from the `execute_workflow` response. The filter isolates this run's KIs — a bare sort would pad the rows with earlier runs' KIs when the pilot writes fewer than 3. (It assumes the workflow writes via `createKi`, which refreshes `@timestamp`; `updateKi` keeps the stored one, so merge flows need a different check.)
+Retrieve the 1–3 generated KIs by running `FROM <backing index of the AI index, e.g. ai-index-idx-<ai_index_id>> | WHERE @timestamp >= "<execution.started_at>" | SORT @timestamp DESC | LIMIT 3` with `platform.context_engine.query_ai_indices`, taking `execution.started_at` from the `execute_workflow` response. The filter isolates this run's KIs — a bare sort would pad the rows with earlier runs' KIs when the pilot writes fewer than 3. (It assumes the workflow writes via `createKi`, which refreshes `@timestamp`; `updateKi` keeps the stored one, so merge flows need a different check.)
 
 Ask yourself:
 - Is the output the expected structure?

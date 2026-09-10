@@ -175,11 +175,14 @@ privileges. Callers also need, on every backing index (`ai-index-*`):
   Elasticsearch returns 403. The counts aggregation also needs `read`; without
   it the two counts sections are omitted and the rest of the block is returned.
 
-Kibana adds only the space filter. For the built-in SML index
-(`ai-index-idx-sml-data`), Elasticsearch additionally applies implicit
-document-level security mirroring Kibana object privileges, so callers only see
-knowledge indicators for dashboards, rules or connectors they could open. Custom
-AI indices get the space filter alone; they are queried like any other index.
+Kibana adds only the space filter. Enforcement is space isolation plus whatever
+Elasticsearch applies for the caller (index privileges and any DLS on the
+role); per-KI Kibana object privileges are not checked. The built-in SML index
+(`ai-index-idx-sml-data`) is the one default index whose documents carry
+`permissions.kibana.privileges`, so a caller with Elasticsearch `read` on it
+can see knowledge indicators for dashboards, rules or connectors they could not
+open in Kibana. This residual is accepted: users query the Elastic AI index like
+any other index.
 
 ## Agent Builder tools
 
@@ -207,10 +210,18 @@ server itself checks); using them also takes Context Engine's `read` privilege,
 which every handler verifies for the caller and, without it, returns an error
 result.
 
+In Agent Builder chat, an agent whose effective configuration lists at least one
+AI index gets the three tools added to its static tool set for the run (when the
+`aiIndices` experimental feature is on), and its AI INDICES prompt section
+points at list → describe → query. The prompt carries no space filter for the
+agent to copy: scoping happens inside `query_ai_indices`. The `ki-retrieval`
+skill teaches the same flow and binds the same three tools.
+
 The space is always derived through the request and never passed directly. In
 Agent Builder chat, it is derived from the agent's space. When using a tool over
-MCP, the space is derived from the space the MCP server is served from
-(`/s/{spaceId}/api/agent_builder/mcp`).
+MCP, the space is derived from the URL the MCP server is served from:
+`/api/agent_builder/mcp` is the default space and
+`/s/{spaceId}/api/agent_builder/mcp` selects another space.
 
 ## Feedback analysis configuration
 
